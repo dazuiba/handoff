@@ -18,10 +18,6 @@ Each task runs as a **background shell command**. Click it to watch ds-cli's liv
 
 ![Claude Code dispatching ds-cli in the background](assets/claude-code.jpg)
 
-Click the background task to watch ds-cli's live shell output:
-
-![ds-cli background shell output](assets/claude-shell.jpg)
-
 ### Codex — the `ds-agent` subagent
 
 > Make a plan, then have `ds-agent` execute the tasks above.

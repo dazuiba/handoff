@@ -18,10 +18,6 @@ GPT-5.5 / Opus 指挥，DeepSeek V4 干活。
 
 ![Claude Code 后台派发 ds-cli](assets/claude-code.jpg)
 
-点击后台任务即可查看 ds-cli 的实时 shell 输出：
-
-![ds-cli 后台 shell 输出](assets/claude-shell.jpg)
-
 ### Codex — `ds-agent` subagent
 
 > 制定计划，并让 `ds-agent` 执行上述任务。
