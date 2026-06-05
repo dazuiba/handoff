@@ -31,6 +31,8 @@ def read_tail_lines(jsonl_path: str, max_lines: int = 80) -> list[str]:
             [CCLEAN, "-n"],
             input="".join(raw),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             timeout=2,
@@ -100,7 +102,7 @@ def execute_run(
         cclean = subprocess.Popen(
             [CCLEAN, "-s", "compact"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            text=True, bufsize=1,
+            text=True, encoding="utf-8", errors="replace", bufsize=1,
         )
     except (FileNotFoundError, OSError):
         cclean = None
