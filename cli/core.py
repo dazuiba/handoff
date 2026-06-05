@@ -13,6 +13,7 @@ import uuid as _uuid
 import datetime
 import json
 import re
+from typing import Optional
 
 STATE_DIR = os.path.expanduser("~/.ds-cli")
 DB_DIR = os.path.join(STATE_DIR, "runs")
@@ -176,7 +177,7 @@ def short_path(p):
     return p
 
 
-def prompt_prefix(prompt: str | None, width: int = 30) -> str:
+def prompt_prefix(prompt: Optional[str], width: int = 30) -> str:
     lines = [l for l in (prompt or "").splitlines() if l.strip()]
     first = lines[0].strip() if lines else ""
     return first[:width]
@@ -302,7 +303,7 @@ def resolve_jsonl(target: str, conn: sqlite3.Connection) -> str:
     return os.path.join(DB_DIR, f"{target}.jsonl")
 
 
-def find_run(conn: sqlite3.Connection, selector: str | None):
+def find_run(conn: sqlite3.Connection, selector: Optional[str]):
     """Find a run by run_id, numeric seq, or latest."""
     if selector:
         row = conn.execute(

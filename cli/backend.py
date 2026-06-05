@@ -20,6 +20,8 @@ Placeholder substitution:
 from __future__ import annotations
 
 import os
+import sys
+from typing import Optional
 
 
 def _substitute(text: str, ctx: dict) -> str:
@@ -76,10 +78,10 @@ def set_backend_env(backend: dict, default_model: str, pro_model: str, model: st
 def build_claude_args(
     backend: dict,
     prompt: str,
-    session_id: str | None = None,
-    model: str | None = None,
-    default_model: str | None = None,
-    pro_model: str | None = None,
+    session_id: Optional[str] = None,
+    model: Optional[str] = None,
+    default_model: Optional[str] = None,
+    pro_model: Optional[str] = None,
 ) -> list[str]:
     """Build the claude CLI argument list from a resolved backend config.
 
@@ -134,8 +136,8 @@ def wrap_with_pty(backend: dict, args: list[str]) -> list[str]:
 def build_resume_args(
     backend: dict,
     session_id: str,
-    default_model: str | None = None,
-    pro_model: str | None = None,
+    default_model: Optional[str] = None,
+    pro_model: Optional[str] = None,
 ) -> list[str]:
     """Build claude resume argument list (for 'go' command)."""
     ctx = {
@@ -175,3 +177,15 @@ def resolve_backend_model(backend: dict, default_model: str, pro_model: str, is_
     ctx = {"default_model": default_model, "pro_model": pro_model, "home": os.path.expanduser("~")}
     resolved = _resolve_env_val(model, ctx)
     return resolved
+
+
+def ensure_backend_token_ready(backend_name: str, backend: dict, user_config_path: str):
+    """Fail fast when the selected backend still uses a placeholder token."""
+    token = backend.get("ANTHROPIC_AUTH_TOKEN")
+    if isinstance(token, str) and token.startswith("<"):
+        print(
+            f"ds-cli: backend '{backend_name}' still uses placeholder token {token}. "
+            f"Edit {user_config_path} and set a real ANTHROPIC_AUTH_TOKEN.",
+            file=sys.stderr,
+        )
+        sys.exit(2)

@@ -12,6 +12,7 @@ import subprocess
 import threading
 import signal
 import datetime
+from typing import Optional
 
 from .core import progress_preview, CCLEAN, extract_result
 
@@ -57,7 +58,7 @@ def read_tail_lines(jsonl_path: str, max_lines: int = 80) -> list[str]:
 def run_claude_foreground(
     cwd: str,
     prompt_text: str,
-    session_id: str | None,
+    session_id: Optional[str],
     jsonl_path: str,
     cmd: list[str],
     conn,
@@ -66,7 +67,7 @@ def run_claude_foreground(
 ):
     """Run claude in foreground, writing to jsonl and displaying progress.
 
-    Used by 'start --fg'.  The 'run' and 'run-demo' commands use _execute() instead.
+    Used by 'start --fg'.  The 'run' command uses _execute() instead.
     """
     proc = subprocess.Popen(
         cmd,
@@ -113,7 +114,7 @@ def run_claude_foreground(
     proc.wait()
 
 
-def run_claude_background(cwd: str, prompt_text: str, session_id: str | None, jsonl_path: str, cmd: list[str]):
+def run_claude_background(cwd: str, prompt_text: str, session_id: Optional[str], jsonl_path: str, cmd: list[str]):
     """Run claude in background, writing to jsonl.
 
     Used by 'start' (without --fg).
@@ -148,7 +149,7 @@ def execute_run(
 ):
     """Execute a claude run: pipe output to JSONL, display progress, extract result.
 
-    This is the core execution loop for 'run' and 'run-demo'.
+    This is the core execution loop for 'run'.
 
     The `cmd` list should already be the full claude invocation wrapped in
     ["script", "-q", "/dev/null", "claude", ...] (wrapping happens in the command function).

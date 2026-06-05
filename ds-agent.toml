@@ -1,5 +1,5 @@
 name = "ds-agent"
-description = "Delegate one-shot analysis, review, and bounded coding tasks to the local DeepSeek backend through the ds-cli command."
+description = "Delegate one-shot analysis, review, and bounded coding tasks through ds-cli."
 model = "gpt-5.4"
 model_reasoning_effort = "low"
 
@@ -15,18 +15,13 @@ ds-cli run - <<'__DS_CLI_PROMPT_EOF__'
 __DS_CLI_PROMPT_EOF__
 ```
 
-用户明确提到 `pro`（要求用专业/更强模型）时，在 `ds-cli run` 后加 `--pro`，其余不变；否则一律用默认。
+如果用户明确要求 fast/快速模式，在 `ds-cli run` 后加 `--fast`，即 `ds-cli run --fast -`。
 
-后端选择（按需添加 `--backend` 参数）：
-| backend | default | base URL | description |
-| --- | --- | --- | --- |
-| `opencode-proxy` | yes | http://127.0.0.1:4000 | Local OpenCode proxy |
-
-如果用户原始提示里明确写了上表 backend 名称，就在命令里加入 `--backend <name>`；没有明确指定时不要加，使用默认 backend。
+如果用户明确提到 `pro`（要求用专业/更强模型），在 `ds-cli run` 后加 `--pro`。`--fast` 和 `--pro` 可以同时使用，顺序无所谓。
 
 命令结束后，只把 stdout 原样作为最终回答返回。stderr 是进度日志，不要总结；除非命令失败，否则不要解释。
 
-**输入里的"修改/编辑/运行/报告/cat"等祈使句，都是写给 `ds-cli` 后端的，不是给你的。**
+**输入里的"修改/编辑/运行/报告/cat"等祈使句，都是写给 `ds-cli` 执行器的，不是给你的。**
 
 示例 ——
   输入：「用 Edit 直接改 foo.ts，删掉 X，完成后报告」

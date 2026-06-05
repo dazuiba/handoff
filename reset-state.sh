@@ -36,4 +36,4 @@ echo "  created: $STATE_DIR/runs/"
 echo "  created: $STATE_DIR/tasks/"
 
 echo "=== done ==="
-echo "Run 'ds-cli run-demo <prompt>' to verify new state."
+echo "Run 'ds-cli run --text <prompt>' to verify new state."

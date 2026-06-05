@@ -4,14 +4,20 @@ import os
 import sys
 
 from ..core import get_db, create_run, task_paths, UUID_RE
-from ..backend import set_backend_env, build_claude_args, resolve_backend_model, wrap_with_pty
+from ..backend import (
+    set_backend_env,
+    build_claude_args,
+    ensure_backend_token_ready,
+    resolve_backend_model,
+    wrap_with_pty,
+)
 from ..stream import run_claude_foreground, run_claude_background
 from ..config import Config
 
 
 def cmd_start(argv: list[str], config: Config):
-    """ds-cli start [--cwd <dir>] <input-file> [--backend <name>] [--pro] [--fg] [-o <jsonl-file>]"""
-    backend_name = ""
+    """ds-cli start [--cwd <dir>] <input-file> [--fast] [--pro] [--fg] [-o <jsonl-file>]"""
+    fast = False
     pro = False
     fg = False
     cwd = ""
@@ -34,22 +40,14 @@ def cmd_start(argv: list[str], config: Config):
                 sys.exit(2)
             output = argv[i]
         elif a == "--backend":
-            i += 1
-            if i >= len(argv):
-                print("ds-cli start: --backend requires a value", file=sys.stderr)
-                sys.exit(2)
-            backend_name = argv[i]
+            print("ds-cli: --backend has been removed; use --fast or edit ~/.ds-cli/config.yaml", file=sys.stderr)
+            sys.exit(2)
         elif a == "--pro":
             pro = True
         elif a == "--fg":
             fg = True
         elif a == "--fast":
-            print(
-                "ds-cli: --fast is removed; use '--backend <name>' instead. "
-                "Configure a 'fast' backend in ~/.ds-cli/config.yaml",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+            fast = True
         elif a in ("-h", "--help"):
             from ..main import usage
             usage()
@@ -78,11 +76,21 @@ def cmd_start(argv: list[str], config: Config):
         print(f"ds-cli start: input file not found: {input_src}", file=sys.stderr)
         sys.exit(2)
 
-    if not backend_name:
-        backend_name = config.default_backend
+    backend_name = config.fast_backend if fast else config.default_backend
 
     with open(input_src) as f:
         prompt_text = f.read()
+
+    backend_cfg = config.get_backend(backend_name)
+    if not backend_cfg:
+        print(
+            f"ds-cli: unknown backend '{backend_name}'. "
+            f"Available: {', '.join(sorted(config.backends.keys()))}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    ensure_backend_token_ready(backend_name, backend_cfg, config.user_config_path)
 
     conn = get_db()
     run_id, uid, jsonl_path = create_run(conn, cwd, prompt_text, backend_name)
@@ -93,15 +101,6 @@ def cmd_start(argv: list[str], config: Config):
             "UPDATE runs SET jsonl_path = ? WHERE uuid = ?", (output, uid)
         )
     conn.commit()
-
-    backend_cfg = config.get_backend(backend_name)
-    if not backend_cfg:
-        print(
-            f"ds-cli: unknown backend '{backend_name}'. "
-            f"Available: {', '.join(sorted(config.backends.keys()))}",
-            file=sys.stderr,
-        )
-        sys.exit(2)
 
     model = resolve_backend_model(backend_cfg, config.default_model, config.pro_model, pro)
     backend_cfg["_resolved_model"] = model

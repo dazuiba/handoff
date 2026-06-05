@@ -1,1 +1,3 @@
-# ds-cli CLI package
+"""ds-cli CLI package."""
+
+__version__ = "0.1.0"
