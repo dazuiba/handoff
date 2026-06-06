@@ -47,6 +47,10 @@ def main():
         usage()
         return
 
+    if subcmd == "--version":
+        print(f"ds-cli {__version__}")
+        return
+
     if subcmd == "install":
         from .commands.install import cmd_install
 
