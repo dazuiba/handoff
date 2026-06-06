@@ -32,13 +32,11 @@ That's the whole idea: the flagship model decomposes and checks the work; DeepSe
 
 ## Install
 
-One line, no manual clone:
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/come2u/ds-cli/main/install-online.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dazuiba/ds-cli/main/install-online.sh | bash
 ```
 
-Requires Python 3 and git. The installer clones ds-cli to `~/.local/share/ds-cli` and links it into the places Claude Code, Codex, and your shell look:
+Requires Python 3 and git. The installer links ds-cli into the places Claude Code, Codex, and your shell look:
 
 ```text
 ~/bin/ds-cli                       -> <checkout>/ds-cli            # command entry

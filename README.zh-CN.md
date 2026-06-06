@@ -32,13 +32,11 @@ Codex 会拉起 subagent 在后台执行，你在 subagent 视图里查看进展
 
 ## 安装
 
-一行命令，无需手动 clone：
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/come2u/ds-cli/main/install-online.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dazuiba/ds-cli/main/install-online.sh | bash
 ```
 
-需要 Python 3 和 git。安装脚本会把 ds-cli 克隆到 `~/.local/share/ds-cli`，并链接到 Claude Code、Codex 和 shell 各自查找的位置：
+需要 Python 3 和 git。安装脚本会把 ds-cli 链接到 Claude Code、Codex 和 shell 各自查找的位置：
 
 ```text
 ~/bin/ds-cli                       -> <checkout>/ds-cli            # 命令入口

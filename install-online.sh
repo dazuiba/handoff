@@ -1,33 +1,48 @@
 #!/usr/bin/env bash
-# ds-cli online installer — clone (or update) ds-cli and link it, no manual clone needed.
+# ds-cli installer — works both locally and via `curl | bash`.
 #
-#   curl -fsSL https://raw.githubusercontent.com/come2u/ds-cli/main/install-online.sh | bash
+# If run from within a ds-cli checkout (the usual dev path), installs directly.
+# If run from curl on a machine with no checkout, clones first.
+#
+# curl -fsSL https://raw.githubusercontent.com/dazuiba/ds-cli/main/install-online.sh | bash
 #
 # Overridable via env:
-#   DS_CLI_REPO   git URL to clone           (default: https://github.com/come2u/ds-cli.git)
-#   DS_CLI_HOME   where to keep the checkout  (default: $XDG_DATA_HOME/ds-cli or ~/.local/share/ds-cli)
+#   DS_CLI_REPO   git URL to clone        (default: https://github.com/dazuiba/ds-cli.git)
+#   DS_CLI_HOME   where to keep the checkout  (default: $XDG_DATA_HOME/ds-cli)
 set -euo pipefail
 
-REPO_URL="${DS_CLI_REPO:-https://github.com/come2u/ds-cli.git}"
-DEST="${DS_CLI_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/ds-cli}"
-
-command -v git     >/dev/null 2>&1 || { echo "ds-cli: git is required"     >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "ds-cli: python3 is required" >&2; exit 1; }
+command -v git     >/dev/null 2>&1 || { echo "ds-cli: git is required"     >&2; exit 1; }
 
-if [ -d "$DEST/.git" ]; then
-  echo "ds-cli: updating existing checkout at $DEST"
-  git -C "$DEST" pull --ff-only
-else
-  echo "ds-cli: cloning into $DEST"
-  mkdir -p "$(dirname "$DEST")"
-  git clone --depth 1 "$REPO_URL" "$DEST"
+# ----- detect whether we're already inside the repo -----------------
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
+IN_REPO=false
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/ds-cli" ] && [ -d "$SCRIPT_DIR/.git" ]; then
+    IN_REPO=true
 fi
 
-python3 -m pip install --user --quiet pyyaml || true
+if $IN_REPO; then
+    echo "ds-cli: installing from local checkout ($SCRIPT_DIR)"
+    DEST="$SCRIPT_DIR"
+else
+    DEST="${DS_CLI_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/ds-cli}"
 
-# --yes: this runs under `curl | bash` with no interactive stdin.
+    if [ -d "$DEST/.git" ]; then
+        echo "ds-cli: updating existing checkout at $DEST"
+        git -C "$DEST" pull --ff-only
+    else
+        REPO="${DS_CLI_REPO:-https://github.com/dazuiba/ds-cli.git}"
+        echo "ds-cli: cloning $REPO into $DEST"
+        mkdir -p "$(dirname "$DEST")"
+        git clone --depth 1 "$REPO" "$DEST"
+    fi
+fi
+
+python3 -m pip install --quiet pyyaml 2>/dev/null || true
+
 "$DEST/ds-cli" install --yes
 
 echo
-echo "ds-cli: installed. Make sure ~/bin is on your PATH, then run: ds-cli --help"
-echo "ds-cli: update any time with: ds-cli update"
+echo "ds-cli: installed."
+echo "ds-cli: Make sure ~/bin is on your PATH, then run: ds-cli --help"
+echo "ds-cli: Update any time with: ds-cli update"
