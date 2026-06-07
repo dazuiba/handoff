@@ -1,11 +1,9 @@
 """ds-cli tail command."""
 
-import os
 import sys
-import subprocess
-import datetime
+import os
 
-from ..core import get_db, find_run, short_path, prompt_prefix
+from ..core import get_db, find_run, short_path, prompt_prefix, task_paths
 
 
 def cmd_tail(argv: list[str], config=None):
@@ -24,6 +22,8 @@ def cmd_tail(argv: list[str], config=None):
 
     conn = get_db()
     row = find_run(conn, selector or None)
+    conn.close()
+
     if not row:
         print("ds-cli tail: no run found", file=sys.stderr)
         sys.exit(1)
@@ -33,48 +33,15 @@ def cmd_tail(argv: list[str], config=None):
         print(f"ds-cli tail: jsonl not found: {jsonl_path}", file=sys.stderr)
         sys.exit(1)
 
-    # header line with run info
-    try:
-        dt = datetime.datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
-        date_str = dt.strftime("%m-%d %H:%M")
-    except (ValueError, TypeError):
-        date_str = row["created_at"] or "?"
-    prompt = prompt_prefix(row["prompt"], 10)
-    cwd_disp = short_path(row["cwd"])
+    run_id = row["run_id"]
+    prompt_path, out_path, result_path = task_paths(run_id)
 
-    print(
-        f"run={row['run_id']}  date={date_str}  prompt=\"{prompt}\"  "
-        f"cwd={cwd_disp}  uuid={row['uuid']}",
-        file=sys.stderr,
-    )
+    run_info = {
+        "run_id": run_id,
+        "date": row["created_at"],
+        "cwd": short_path(row["cwd"]),
+        "uuid": row["uuid"],
+    }
 
-    conn.close()
-
-    tail = subprocess.Popen(
-        ["tail", "-n", "20", "-F", jsonl_path],
-        stdout=subprocess.PIPE,
-    )
-    grep = subprocess.Popen(
-        ["grep", "--line-buffered", "^{"],
-        stdin=tail.stdout,
-        stdout=subprocess.PIPE,
-    )
-    tail.stdout.close()
-    cclean = subprocess.Popen(
-        ["cclean", "-n"],
-        stdin=grep.stdout,
-    )
-    grep.stdout.close()
-
-    procs = [tail, grep, cclean]
-    try:
-        cclean.wait()
-    except KeyboardInterrupt:
-        for p in procs:
-            p.terminate()
-        for p in procs:
-            try:
-                p.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                p.kill()
-        sys.exit(130)
+    from ..jsonl_viewer import run_tail
+    run_tail(jsonl_path, prompt_path, result_path, run_info)

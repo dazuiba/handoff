@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import shutil
 import sqlite3
 import uuid as _uuid
 import datetime
@@ -19,7 +20,19 @@ STATE_DIR = os.path.expanduser("~/.ds-cli")
 DB_DIR = os.path.join(STATE_DIR, "runs")
 DB_PATH = os.path.join(DB_DIR, "dscli.db")
 TASKS_DIR = os.path.join(STATE_DIR, "tasks")
-CCLEAN = os.path.expanduser("~/.local/bin/cclean")
+
+
+def _find_cclean() -> str:
+    override = os.environ.get("DS_CLI_CCLEAN")
+    if override:
+        return override
+    which = shutil.which("cclean")
+    if which:
+        return which
+    return os.path.expanduser("~/.local/bin/cclean")
+
+
+CCLEAN = _find_cclean()
 _MAX_DAILY = 1035  # ZZ is max seq_code
 
 UUID_RE = re.compile(

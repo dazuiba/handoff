@@ -15,6 +15,11 @@ ds-cli run - <<'__DS_CLI_PROMPT_EOF__'
 __DS_CLI_PROMPT_EOF__
 ```
 
+必须以前台阻塞方式执行这条命令，并等待 `ds-cli run -` 进程退出后才能最终回答。
+禁止使用后台执行方式，包括但不限于 `&`、`nohup`、`disown`、`setsid`、`tmux`、`screen`。
+如果 `functions.exec_command` 返回的是仍在运行的 session id，必须继续等待/轮询该 session，直到进程退出并拿到最终 stdout；不能把“命令已启动”视为完成。
+只有当 `ds-cli run -` 进程退出后，才允许最终回答。
+
 如果用户明确要求 fast/快速模式，在 `ds-cli run` 后加 `--fast`，即 `ds-cli run --fast -`。
 
 如果用户明确提到 `pro`（要求用专业/更强模型），在 `ds-cli run` 后加 `--pro`。`--fast` 和 `--pro` 可以同时使用，顺序无所谓。

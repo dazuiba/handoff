@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["PyYAML>=6,<7", "textual>=2,<3"]
+# ///
 """ds-cli — Claude Code CLI proxy with configurable backend support.
 
 Thin entry point — all logic lives in cli/ subpackage.

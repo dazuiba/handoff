@@ -1,6 +1,6 @@
 """Stream processing helpers for ds-cli.
 
-Handles JSONL reading/writing, cclean integration, progress display,
+Handles JSONL reading/writing, cclean-integration progress display,
 and foreground result output.
 """
 
@@ -13,46 +13,6 @@ import threading
 import signal
 import datetime
 from .core import progress_preview, CCLEAN, extract_result
-
-
-def read_tail_lines(jsonl_path: str, max_lines: int = 80) -> list[str]:
-    try:
-        with open(jsonl_path, "r") as f:
-            raw = [line for line in f if line.startswith("{")]
-    except FileNotFoundError:
-        return [f"jsonl not found: {jsonl_path}"]
-
-    raw = raw[-max(20, max_lines):]
-    if not raw:
-        return ["(no json lines)"]
-
-    try:
-        proc = subprocess.run(
-            [CCLEAN, "-n"],
-            input="".join(raw),
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=2,
-        )
-        lines = [line.rstrip() for line in proc.stdout.splitlines() if line.strip()]
-        if lines:
-            return lines[-max_lines:]
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    display = []
-    for line in raw:
-        preview = progress_preview(line)
-        if preview:
-            try:
-                t = json.loads(line).get("type", "")
-            except json.JSONDecodeError:
-                t = ""
-            display.append(f"{t}\t{preview}")
-    return display[-max_lines:] or ["(no displayable events)"]
 
 
 def _pump_cclean(cclean, of):

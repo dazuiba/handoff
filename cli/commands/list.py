@@ -1,7 +1,6 @@
 """ds-cli list command."""
 
 import sys
-import curses
 
 from ..core import get_db, format_run_row
 from ..config import Config
@@ -37,11 +36,15 @@ def cmd_list(argv: list[str], config: Config):
         return
 
     if sys.stdin.isatty() and sys.stdout.isatty():
-        from ..tui import list_tui
-        action = curses.wrapper(list_tui, rows, full_cwd)
-        if action and action[0] == "go":
+        from ..tui import RunListApp
+
+        app = RunListApp(rows, full_cwd)
+        app.run()
+
+        if app.action_result and app.action_result.startswith("go:"):
+            run_id = app.action_result[3:]
             from .go import cmd_go
-            cmd_go([str(action[1])], config)
+            cmd_go([run_id], config)
         return
 
     header = ["RUN", "DATE", "PROMPT", "CWD"]
