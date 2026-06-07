@@ -8,11 +8,9 @@ from __future__ import annotations
 
 import os
 import sys
-import shutil
 import sqlite3
 import uuid as _uuid
 import datetime
-import json
 import re
 from typing import Optional
 
@@ -20,19 +18,6 @@ STATE_DIR = os.path.expanduser("~/.ds-cli")
 DB_DIR = os.path.join(STATE_DIR, "runs")
 DB_PATH = os.path.join(DB_DIR, "dscli.db")
 TASKS_DIR = os.path.join(STATE_DIR, "tasks")
-
-
-def _find_cclean() -> str:
-    override = os.environ.get("DS_CLI_CCLEAN")
-    if override:
-        return override
-    which = shutil.which("cclean")
-    if which:
-        return which
-    return os.path.expanduser("~/.local/bin/cclean")
-
-
-CCLEAN = _find_cclean()
 _MAX_DAILY = 1035  # ZZ is max seq_code
 
 UUID_RE = re.compile(
@@ -165,7 +150,7 @@ def create_run(conn: sqlite3.Connection, cwd: str, prompt_text: str, backend_nam
     )
 
     seq_code = counter_to_seq_code(n)
-    run_id = f"ds-{seq_code}-{mmdd}"
+    run_id = f"dds-{mmdd}-{seq_code}"
     uid = str(_uuid.uuid4()).lower()
     jsonl_path = os.path.join(DB_DIR, f"{run_id}-{uid}.jsonl")
 
@@ -225,60 +210,6 @@ def row_value(row, key: str, default=None):
         return row[key]
     except (KeyError, IndexError, TypeError):
         return default
-
-
-def progress_preview(line: str) -> str:
-    """One-line preview from a stream-json line for progress display."""
-    try:
-        obj = json.loads(line)
-    except json.JSONDecodeError:
-        return ""
-    t = obj.get("type")
-    try:
-        if t == "assistant":
-            c0 = obj["message"]["content"][0]
-            text = c0.get("text") or c0.get("input") or ""
-            if not isinstance(text, str):
-                text = json.dumps(text)
-            return text[:10].replace("\n", " ").replace("\r", " ").replace("\t", " ")
-        elif t == "user":
-            text = obj["message"]["content"][0].get("content", "")
-            if not isinstance(text, str):
-                text = json.dumps(text)
-            return text[:10].replace("\n", " ").replace("\r", " ").replace("\t", " ")
-        elif t == "result":
-            sub = obj.get("subtype", "success")
-            if sub == "success" and not obj.get("is_error", False):
-                return "DONE"
-            return "ERROR"
-        elif t == "system":
-            return obj.get("subtype", "")
-        elif t == "stream_event":
-            return obj.get("event", {}).get("type", "")
-    except (KeyError, IndexError, TypeError):
-        pass
-    return ""
-
-
-def extract_result(jsonl_path: str):
-    """Return the last successful result text from a JSONL file (or None)."""
-    try:
-        with open(jsonl_path, "r") as f:
-            last = None
-            for raw in f:
-                try:
-                    obj = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if obj.get("type") == "result":
-                    if (
-                        obj.get("subtype", "success") == "success"
-                        and not obj.get("is_error", False)
-                    ):
-                        last = obj.get("result", "")
-            return last
-    except FileNotFoundError:
-        return None
 
 
 def find_run(conn: sqlite3.Connection, selector: Optional[str]):

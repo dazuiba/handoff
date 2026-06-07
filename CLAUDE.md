@@ -62,13 +62,13 @@ Functions that set environment variables and build `claude` CLI argument lists f
 
 `execute_run()` — the core of `run`:
 1. Spawns `claude` (with PTY wrapper) as a subprocess, stdout captured
-2. For each JSONL line from claude: writes line to `.jsonl` file, pipes through `cclean -s compact` for compact stderr progress, writes progress to `.out.txt`
+2. For each JSONL line from claude: writes line to `.jsonl` file, parses assistant plan text for stderr progress, writes progress to `.out.txt`
 3. On `type: "result"` with `is_error: false`, extracts result text → writes `.result.md` and prints to stdout
 4. `RESULT=<abs-path-to-result.md>` is printed to both stdout and stderr so callers can capture it
 
 ### TUI (`cli/tui.py`)
 
-Curses-based interactive listing for `ds-cli list`. Renders a scrollable table of runs, supports detail view (shows prompt + live-tail via `cclean -n`), resume (`G`), and copy session UUID (`C` → pbcopy).
+Curses-based interactive listing for `ds-cli list`. Renders a scrollable table of runs, supports detail view (shows prompt + parsed JSONL event stream), resume (`G`), and copy session UUID (`C` → pbcopy).
 
 ### Skill/subagent files
 

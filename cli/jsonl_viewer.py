@@ -10,10 +10,8 @@ Modes:
 
 from __future__ import annotations
 
-import json
 import os
 import asyncio
-import datetime
 from typing import Optional
 
 from textual import work
@@ -28,129 +26,7 @@ from textual.widgets import (
 )
 from textual.containers import VerticalScroll
 from textual.binding import Binding
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# JSONL event parser
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class ParsedEvent:
-    """One displayable line from the JSONL stream."""
-
-    __slots__ = ("ts", "text", "kind")
-
-    def __init__(self, ts: str, text: str, kind: str = "info"):
-        self.ts = ts
-        self.text = text
-        self.kind = kind  # "info" | "tool" | "text" | "result" | "error" | "task"
-
-
-def _extract_time(obj: dict) -> str:
-    ts_str = obj.get("timestamp", "")
-    if ts_str and isinstance(ts_str, str):
-        try:
-            dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-            return dt.strftime("%H:%M:%S")
-        except (ValueError, TypeError):
-            pass
-    return ""
-
-
-def _truncate(text: str, n: int = 60) -> str:
-    collapsed = " ".join(text.split())
-    if len(collapsed) <= n:
-        return collapsed
-    return collapsed[: n - 1] + "…"
-
-
-def parse_jsonl_line(line: str, prev_ts: str = "") -> list[ParsedEvent]:
-    """Parse one JSONL line into zero or more displayable events."""
-    line = line.strip()
-    if not line.startswith("{"):
-        return []
-
-    try:
-        obj = json.loads(line)
-    except json.JSONDecodeError:
-        return []
-
-    ts = _extract_time(obj) or prev_ts
-    t = obj.get("type", "")
-    results: list[ParsedEvent] = []
-
-    if t == "stream_event":
-        se = obj.get("event", {})
-        et = se.get("type", "")
-
-        if et == "content_block_delta":
-            pass  # deltas are too granular; skip all
-
-        elif et == "content_block_start":
-            cb = se.get("content_block", {})
-            cbt = cb.get("type", "")
-            if cbt == "tool_use":
-                name = cb.get("name", "?")
-                tid = cb.get("id", "")
-                short = tid.split("_")[-1][:8] if "_" in tid else tid[:8]
-                results.append(ParsedEvent(ts, f"▷ {name} {short}", "tool"))
-            # text / thinking block start → skip
-
-        elif et == "content_block_stop":
-            pass
-
-        elif et == "message_start":
-            model = se.get("message", {}).get("model", "")
-            if model:
-                results.append(ParsedEvent(ts, f"model: {model}", "info"))
-
-    elif t == "assistant":
-        for c in obj.get("message", {}).get("content", []):
-            ct = c.get("type", "")
-            if ct == "text":
-                text = c.get("text", "")
-                preview = _truncate(text, 80)
-                if preview:
-                    results.append(ParsedEvent(ts, preview, "text"))
-
-    elif t == "user":
-        content = obj.get("message", {}).get("content", [])
-        if isinstance(content, list):
-            for c in content:
-                if isinstance(c, dict) and c.get("type") == "tool_result":
-                    tc = c.get("content", "")
-                    if isinstance(tc, str):
-                        preview = _truncate(tc, 80)
-                        if preview:
-                            results.append(ParsedEvent(ts, preview, "info"))
-
-    elif t == "system":
-        sub = obj.get("subtype", "")
-        if sub == "status":
-            status = obj.get("status", "")
-            if status:
-                results.append(ParsedEvent(ts, f"status: {status}", "info"))
-        elif sub == "task_started":
-            desc = obj.get("description", "")
-            if desc:
-                results.append(ParsedEvent(ts, f"▷ {desc}", "task"))
-
-    elif t == "result":
-        sub = obj.get("subtype", "")
-        duration = obj.get("duration_ms", 0)
-        cost = obj.get("total_cost_usd", 0)
-        turns = obj.get("num_turns", 0)
-        dur_str = f"{duration / 1000:.0f}s" if duration else "?"
-        summary = f"Done  {dur_str}  {turns} turns  ${cost:.4f}"
-        if sub == "success" and not obj.get("is_error", False):
-            results.append(ParsedEvent(ts, summary, "result"))
-        else:
-            results.append(ParsedEvent(ts, f"ERROR: {summary}", "error"))
-
-        result_text = obj.get("result", "")
-        if result_text:
-            results.append(ParsedEvent(ts, f"__RESULT__{result_text}", "result"))
-
-    return results
+from .jsonl_parser import ParsedEvent, format_event_for_viewer, read_events
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -198,6 +74,7 @@ class JsonlViewerScreen(Screen):
         self._fpos = 0
         self._result_text: Optional[str] = None
         self._stream_raw = ""      # accumulated stream content for incremental update
+        self._last_stream_line = ""
         self._poll_interval = 0.5
         super().__init__(name=name, id=id, classes=classes)
 
@@ -247,28 +124,9 @@ class JsonlViewerScreen(Screen):
         if os.path.isfile(self._jl_path):
             with open(self._jl_path, "r") as f:
                 f.seek(self._fpos)
-                lines: list[str] = []
-                for line in f:
-                    events = parse_jsonl_line(line, self._last_ts)
-                    for ev in events:
-                        if ev.ts:
-                            self._last_ts = ev.ts
-                        if ev.text.startswith("__RESULT__"):
-                            self._result_text = ev.text[len("__RESULT__"):]
-                            try:
-                                self.query_one("#result_md", Markdown).update(self._result_text)
-                                self.query_one(TabbedContent).active = "result"
-                            except Exception:
-                                pass
-                            continue
-                        ts = ev.ts or " " * 8
-                        kind_mark = {"tool": "▷", "text": "✎", "result": "✓",
-                                     "error": "✗", "task": "▶", "info": "·"}.get(ev.kind, " ")
-                        lines.append(f"`{ts}` {kind_mark} {ev.text}")
+                events, self._last_ts = read_events(f, self._last_ts)
                 self._fpos = f.tell()
-            if lines:
-                self._stream_raw = "\n".join(lines)
-                self.query_one("#stream_text", Static).update(self._stream_raw)
+            self._append_events(events)
 
         # Start follow worker in tail mode
         if self._follow:
@@ -278,43 +136,48 @@ class JsonlViewerScreen(Screen):
 
     @work(exclusive=True, thread=False)
     async def _poll_jsonl(self) -> None:
-        new_lines: list[str] = []
         while self._follow:
             if os.path.isfile(self._jl_path):
                 try:
                     with open(self._jl_path, "r") as f:
                         f.seek(self._fpos)
-                        for line in f:
-                            events = parse_jsonl_line(line, self._last_ts)
-                            for ev in events:
-                                if ev.ts:
-                                    self._last_ts = ev.ts
-                                if ev.text.startswith("__RESULT__"):
-                                    self._result_text = ev.text[len("__RESULT__"):]
-                                    try:
-                                        self.query_one("#result_md", Markdown).update(self._result_text)
-                                        self.query_one(TabbedContent).active = "result"
-                                    except Exception:
-                                        pass
-                                    continue
-                                ts = ev.ts or " " * 8
-                                kind_mark = {"tool": "▷", "text": "✎", "result": "✓",
-                                             "error": "✗", "task": "▶", "info": "·"}.get(ev.kind, " ")
-                                new_lines.append(f"`{ts}` {kind_mark} {ev.text}")
+                        events, self._last_ts = read_events(f, self._last_ts)
                         self._fpos = f.tell()
-                    if new_lines:
-                        # Append to existing stream content
-                        try:
-                            current = self._stream_raw or ""
-                            appended = "\n".join(new_lines)
-                            self._stream_raw = current + "\n" + appended if current else appended
-                            self.query_one("#stream_text", Static).update(self._stream_raw)
-                            new_lines.clear()
-                        except Exception:
-                            pass
+                    self._append_events(events)
                 except (OSError, UnicodeDecodeError):
                     pass
             await asyncio.sleep(self._poll_interval)
+
+    def _append_events(self, events: list[ParsedEvent]) -> None:
+        if not events:
+            return
+
+        new_lines: list[str] = []
+        for event in events:
+            if event.kind in ("result_text", "error_text"):
+                self._result_text = event.text
+                try:
+                    self.query_one("#result_md", Markdown).update(self._result_text)
+                    self.query_one(TabbedContent).active = "result"
+                except Exception:
+                    pass
+                continue
+
+            line = format_event_for_viewer(event)
+            if line and line != self._last_stream_line:
+                new_lines.append(line)
+                self._last_stream_line = line
+
+        if not new_lines:
+            return
+
+        try:
+            current = self._stream_raw or ""
+            appended = "\n".join(new_lines)
+            self._stream_raw = current + "\n" + appended if current else appended
+            self.query_one("#stream_text", Static).update(self._stream_raw)
+        except Exception:
+            pass
 
     # ── actions ──────────────────────────────────────────────────────────
 

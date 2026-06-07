@@ -1,28 +1,12 @@
-"""Stream processing helpers for ds-cli.
-
-Handles JSONL reading/writing, cclean-integration progress display,
-and foreground result output.
-"""
+"""Stream processing helpers for ds-cli."""
 
 from __future__ import annotations
 
 import sys
-import json
 import subprocess
-import threading
 import signal
 import datetime
-from .core import progress_preview, CCLEAN, extract_result
-
-
-def _pump_cclean(cclean, of):
-    """Background thread to read cclean output and print to stderr."""
-    for cleaned in cclean.stdout:
-        ts = datetime.datetime.now().strftime("%H:%M:%S")
-        disp = f"{ts} {cleaned.rstrip()}"
-        print(disp, file=sys.stderr, flush=True)
-        of.write(disp + "\n")
-        of.flush()
+from .jsonl_parser import extract_result, format_event_for_stream, parse_jsonl_line
 
 
 def execute_run(
@@ -41,8 +25,7 @@ def execute_run(
     The `cmd` list should already be the full claude invocation wrapped in
     ["script", "-q", "/dev/null", "claude", ...] (wrapping happens in the command function).
     """
-    from .core import task_paths
-    prompt_path, out_path, result_path = task_paths_tuple
+    _, out_path, result_path = task_paths_tuple
 
     def update_status(status: str):
         conn.execute("UPDATE runs SET status = ? WHERE uuid = ?", (status, uid))
@@ -59,22 +42,9 @@ def execute_run(
     result_seen = False
 
     try:
-        cclean = subprocess.Popen(
-            [CCLEAN, "-s", "compact"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace", bufsize=1,
-        )
-    except (FileNotFoundError, OSError):
-        cclean = None
-
-    try:
         with open(jsonl_path, "w") as jf, open(out_path, "w") as of:
-            pump_thread = None
-            if cclean is not None:
-                pump_thread = threading.Thread(
-                    target=_pump_cclean, args=(cclean, of), daemon=True
-                )
-                pump_thread.start()
+            last_ts = ""
+            last_plan = ""
 
             for line_bytes in proc.stdout:
                 try:
@@ -88,55 +58,28 @@ def execute_run(
                 if not line.startswith("{"):
                     continue
 
-                if cclean is not None:
-                    try:
-                        cclean.stdin.write(line + "\n")
-                        cclean.stdin.flush()
-                    except (BrokenPipeError, ValueError):
-                        cclean = None
-                else:
-                    preview = progress_preview(line)
-                    if preview:
-                        ts = datetime.datetime.now().strftime("%H:%M:%S")
-                        try:
-                            t = json.loads(line).get("type", "")
-                        except json.JSONDecodeError:
-                            t = ""
-                        if t in ("assistant", "result"):
-                            disp = f"{ts} {t}\t{preview}"
-                            print(disp, file=sys.stderr)
-                            of.write(disp + "\n")
-                            of.flush()
+                events = parse_jsonl_line(line, last_ts)
+                for event in events:
+                    if event.ts:
+                        last_ts = event.ts
 
-                try:
-                    obj = json.loads(line)
-                    if obj.get("type") == "result":
-                        if (
-                            obj.get("subtype", "success") == "success"
-                            and not obj.get("is_error", False)
-                        ):
-                            r = obj.get("result", "")
-                            if r:
-                                result = r
-                                result_seen = True
-                except json.JSONDecodeError:
-                    pass
+                    if event.kind == "result_text" and event.text:
+                        result = event.text
+                        result_seen = True
+                        continue
 
-            if cclean is not None:
-                try:
-                    cclean.stdin.close()
-                except (BrokenPipeError, ValueError):
-                    pass
-                if pump_thread is not None:
-                    pump_thread.join(timeout=5)
-                try:
-                    cclean.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    cclean.kill()
+                    plan_text = format_event_for_stream(event)
+                    if not plan_text or plan_text == last_plan:
+                        continue
+
+                    ts = event.ts or datetime.datetime.now().strftime("%H:%M:%S")
+                    disp = f"{ts} {plan_text}"
+                    print(disp, file=sys.stderr, flush=True)
+                    of.write(disp + "\n")
+                    of.flush()
+                    last_plan = plan_text
 
     except KeyboardInterrupt:
-        if cclean is not None:
-            cclean.kill()
         proc.send_signal(signal.SIGINT)
         try:
             proc.wait(timeout=5)

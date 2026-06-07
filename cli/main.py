@@ -22,7 +22,7 @@ def usage(config=None):
   ds-cli go               — resume a past session in claude
   ds-cli tail             — live-tail a run's stream
 
-Run ids: ds-<SEQ_CODE>-<MMDD>  (seq_code: daily counter, 01..99, A0..ZZ)
+Run ids: dds-<MMDD>-<SEQ_CODE>  (seq_code: daily counter, 01..99, A0..ZZ)
 --cwd defaults to the current directory of the calling process.
 --fast uses fast_backend from ~/.ds-cli/config.yaml.
 --pro uses the pro model profile on the selected backend."""
