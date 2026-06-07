@@ -126,11 +126,30 @@ Fire off multiple background tasks in a single message; each completes and notif
 
 ## Installation
 
+### Homebrew (recommended)
+
+```bash
+brew install dazuiba/tap/ds-cli
+```
+
+After installing, run `ds-cli install` to initialize your config, then edit `~/.ds-cli/config.yaml` to fill in your token:
+
+```yaml
+default_backend: default
+fast_backend: default
+backends:
+  default:
+    env:
+      ANTHROPIC_AUTH_TOKEN: "sk-your-token"   # defaults to https://api.deepseek.com/anthropic
+```
+
+### Online install
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dazuiba/ds-cli/main/install-online.sh | bash
 ```
 
-Requires Python 3 and git. The install script links ds-cli into the locations where Claude Code, Codex, and the shell each look:
+Requires Python 3.10+ and git. The install script links ds-cli into the locations where Claude Code, Codex, and the shell each look:
 
 ```text
 ~/bin/ds-cli                       -> <checkout>/ds-cli            # command entry point
@@ -151,13 +170,12 @@ backends:
 
 For the full config (local OpenCode proxy, model / system prompt overrides, all overridable fields) see **[Configuration docs →](docs/configuration.zh-CN.md)**.
 
-> Prefer to clone it yourself? `git clone` the repo, `pip install pyyaml`, then run `./ds-cli install`.
+> Prefer to clone it yourself? `git clone` the repo, then run `./ds-cli install` (requires `uv`).
 
 ## Updating
 
-```bash
-ds-cli update   # pull the latest source into the checkout and refresh the links
-```
+- **Homebrew install**: `brew upgrade dazuiba/tap/ds-cli`
+- **Source checkout**: `ds-cli update` (pull the latest source and refresh the links)
 
 ## More
 

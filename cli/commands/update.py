@@ -6,6 +6,8 @@ import os
 import subprocess
 import sys
 
+from ..homebrew import is_homebrew_install
+
 
 def _repo_root() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -18,6 +20,14 @@ def cmd_update(args):
     if args:
         print("ds-cli: update does not accept arguments", file=sys.stderr)
         sys.exit(2)
+
+    if is_homebrew_install():
+        print(
+            "ds-cli: this installation is managed by Homebrew.\n"
+            "  To update, run:  brew upgrade dazuiba/tap/ds-cli",
+            file=sys.stderr,
+        )
+        sys.exit(0)
 
     root = _repo_root()
     if not os.path.isdir(os.path.join(root, ".git")):

@@ -53,3 +53,4 @@ echo
 echo "ds-cli: installed."
 echo "ds-cli: Make sure ~/bin is on your PATH, then run: ds-cli --help"
 echo "ds-cli: Update any time with: ds-cli update"
+echo "ds-cli: Prefer Homebrew?  brew install dazuiba/tap/ds-cli"

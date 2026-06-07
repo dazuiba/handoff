@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from ..config import user_config_path, write_default_user_config
+from ..homebrew import is_homebrew_install
 
 
 def _repo_root() -> str:
@@ -25,12 +26,18 @@ def _color(code: str, text: str) -> str:
 
 def _planned_writes() -> list[tuple[str, str, str]]:
     root = _repo_root()
-    return [
+    plans: list[tuple[str, str, str]] = [
         ("config", "write if missing", user_config_path()),
-        ("soft link", os.path.join(root, "ds-cli"), _home_path("bin", "ds-cli")),
+    ]
+
+    if not is_homebrew_install():
+        plans.append(("soft link", os.path.join(root, "ds-cli"), _home_path("bin", "ds-cli")))
+
+    plans += [
         ("hard link", os.path.join(root, "ds-agent.toml"), _home_path(".codex", "agents", "ds-agent.toml")),
         ("soft link", os.path.join(root, "SKILL.md"), _home_path(".claude", "skills", "ds-cli", "SKILL.md")),
     ]
+    return plans
 
 
 def _print_plan():
@@ -89,10 +96,18 @@ def run_install(assume_yes: bool = False):
     _run_install_sh()
 
     readme = os.path.join(_repo_root(), "README.md")
-    print("")
-    print("Next:")
-    print(f"  1. Edit {user_config_path()} and replace <YOUR_TOKEN> with your auth token.")
-    print(f"  2. Read {readme} for Codex and Claude Code usage.")
+
+    if is_homebrew_install():
+        print("")
+        print("Next:")
+        print(f"  1. Edit {user_config_path()} and replace <YOUR_TOKEN> with your auth token.")
+        print(f"  2. Read {readme} for Codex and Claude Code usage.")
+        print(f"  3. To update ds-cli later, run: brew upgrade dazuiba/tap/ds-cli")
+    else:
+        print("")
+        print("Next:")
+        print(f"  1. Edit {user_config_path()} and replace <YOUR_TOKEN> with your auth token.")
+        print(f"  2. Read {readme} for Codex and Claude Code usage.")
 
 
 def cmd_install(args):

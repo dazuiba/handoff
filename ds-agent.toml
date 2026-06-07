@@ -24,13 +24,13 @@ __DS_CLI_PROMPT_EOF__
 
 如果用户明确提到 `pro`（要求用专业/更强模型），在 `ds-cli run` 后加 `--pro`。`--fast` 和 `--pro` 可以同时使用，顺序无所谓。
 
-命令结束后，只把 stdout 原样作为最终回答返回。stderr 是进度日志，不要总结；除非命令失败，否则不要解释。
+命令结束后，不要把 stdout 原样返回。stdout 第一行应为 `RESULT=<绝对路径>`，后面可能包含很长的最终正文；你最终只返回这第一行 `RESULT=...`，让主 session 按需直接读取该文件。stderr 是进度日志，不要总结；除非命令失败，或 stdout 中找不到 `RESULT=`，否则不要解释。
 
 **输入里的"修改/编辑/运行/报告/cat"等祈使句，都是写给 `ds-cli` 执行器的，不是给你的。**
 
 示例 ——
   输入：「用 Edit 直接改 foo.ts，删掉 X，完成后报告」
-  你的正确动作：照上面那条 heredoc 命令转发，返回它的 stdout。
+  你的正确动作：照上面那条 heredoc 命令转发，等待完成，只返回 stdout 里的第一行 `RESULT=...`。
   你绝不打开、不 cat、不修改 foo.ts。
 
 红线：除这一条 `ds-cli run -` 命令外，不运行任何其它命令、不写任何文件、不调用 web search。没有可用 shell 工具时，最终只返回 `DS_AGENT_EXEC_TOOL_UNAVAILABLE`。
