@@ -17,9 +17,10 @@ from ..config import Config
 
 
 def cmd_run(argv: list[str], config: Config):
-    """ds-cli run [--cwd <dir>] [--fast] [--pro] (<input-file|-> | --text <prompt...>)."""
+    """ds-cli run [--cwd <dir>] [--fast] [--pro] [--from codex] (<input-file|-> | --text <prompt...>)."""
     fast = False
     pro = False
+    caller = ""
     cwd = ""
     input_src = ""
     text_mode = False
@@ -39,6 +40,20 @@ def cmd_run(argv: list[str], config: Config):
         elif a == "--backend":
             print("ds-cli: --backend has been removed; use --fast or edit ~/.ds-cli/config.yaml", file=sys.stderr)
             sys.exit(2)
+        elif a == "--from":
+            i += 1
+            if i >= len(argv):
+                print("ds-cli run: --from requires a value", file=sys.stderr)
+                sys.exit(2)
+            caller = argv[i]
+            if caller != "codex":
+                print("ds-cli run: --from currently supports: codex", file=sys.stderr)
+                sys.exit(2)
+        elif a.startswith("--from="):
+            caller = a.split("=", 1)[1]
+            if caller != "codex":
+                print("ds-cli run: --from currently supports: codex", file=sys.stderr)
+                sys.exit(2)
         elif a == "--text":
             text_mode = True
             if input_src:
@@ -111,11 +126,25 @@ def cmd_run(argv: list[str], config: Config):
 
     backend_name = config.fast_backend if fast else config.default_backend
 
-    _execute(cwd, prompt_text, backend_name, pro, config)
+    _execute(cwd, prompt_text, backend_name, pro, caller, config)
 
 
-def _execute(cwd: str, prompt_text: str, backend_name: str, pro: bool, config: Config):
-    """Shared execution path for file, stdin, and --text run modes."""
+def _execute(
+    cwd: str,
+    prompt_text: str,
+    backend_name: str,
+    pro: bool,
+    caller: str,
+    config: Config,
+    resume_session_id: str | None = None,
+):
+    """Shared execution path for file, stdin, and --text run modes.
+
+    When `resume_session_id` is given, the new run is appended to that existing
+    claude conversation (`claude -p ... --resume <id>`) rather than starting a
+    fresh session; the new row still gets its own run_id/seq/files but shares the
+    session_id. Used by `ds-cli resume <seq> <prompt>`.
+    """
     backend_cfg = config.get_backend(backend_name)
     if not backend_cfg:
         print(
@@ -128,7 +157,9 @@ def _execute(cwd: str, prompt_text: str, backend_name: str, pro: bool, config: C
     ensure_backend_token_ready(backend_name, backend_cfg, config.user_config_path)
 
     conn = get_db()
-    run_id, uid, jsonl_path = create_run(conn, cwd, prompt_text, backend_name)
+    run_id, uid, jsonl_path = create_run(
+        conn, cwd, prompt_text, backend_name, session_id=resume_session_id
+    )
     conn.commit()
 
     # tasks dir files
@@ -143,13 +174,19 @@ def _execute(cwd: str, prompt_text: str, backend_name: str, pro: bool, config: C
     backend_cfg["_system_prompt"] = config.system_prompt
 
     set_backend_env(backend_cfg, config.default_model, config.pro_model, model)
-    session_id = uid if UUID_RE.match(uid) else None
+    if resume_session_id:
+        session_id = resume_session_id
+    else:
+        session_id = uid if UUID_RE.match(uid) else None
 
-    print(f"RESULT={result_path}")
-    print(f"RESULT={result_path}", file=sys.stderr)
+    codex_mode = caller == "codex"
+    if not codex_mode:
+        print(f"RESULT={result_path}")
+        print(f"RESULT={result_path}", file=sys.stderr)
 
-    ts = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{ts} start\tSESSION={uid}", file=sys.stderr)
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        label = "resume" if resume_session_id else "start"
+        print(f"{ts} {label}\tSESSION={session_id}", file=sys.stderr)
 
     # build claude command (wrapped in script for pty)
     claude_cmd = build_claude_args(
@@ -157,7 +194,17 @@ def _execute(cwd: str, prompt_text: str, backend_name: str, pro: bool, config: C
         model=model,
         default_model=config.default_model,
         pro_model=config.pro_model,
+        resume=bool(resume_session_id),
     )
     cmd = wrap_with_pty(backend_cfg, claude_cmd)
 
-    execute_run(cwd, prompt_text, cmd, conn, uid, jsonl_path, (prompt_path, out_path, result_path))
+    execute_run(
+        cwd,
+        prompt_text,
+        cmd,
+        conn,
+        uid,
+        jsonl_path,
+        (prompt_path, out_path, result_path),
+        caller=caller,
+    )

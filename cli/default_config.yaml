@@ -44,6 +44,12 @@ backend_template:
   session_id_flags:
     - "--session-id"
     - "{session_id}"
+  # Used by `resume <seq> <prompt>` (non-interactive continuation): append a new
+  # turn to an existing claude session in print mode. Combined with session_flags
+  # (which carry -p/{prompt}/stream-json/etc.), this becomes `claude -p ... --resume <id>`.
+  continue_id_flags:
+    - "--resume"
+    - "{session_id}"
   resume_flags:
     - "--resume"
     - "{session_id}"

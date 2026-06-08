@@ -29,23 +29,33 @@ def cmd_list(argv: list[str], config: Config):
         "SELECT seq, run_id, uuid, cwd, prompt, created_at, jsonl_path, status, backend "
         "FROM runs ORDER BY created_at DESC LIMIT 50"
     ).fetchall()
-    conn.close()
 
     if not rows:
+        conn.close()
         print("(no runs)")
         return
 
     if sys.stdin.isatty() and sys.stdout.isatty():
         from ..tui import RunListApp
 
-        app = RunListApp(rows, full_cwd)
-        app.run()
+        def _refresh_rows():
+            """Re-query the DB for the latest 50 runs.  Called by the TUI timer."""
+            return conn.execute(
+                "SELECT seq, run_id, uuid, cwd, prompt, created_at, jsonl_path, status, backend "
+                "FROM runs ORDER BY created_at DESC LIMIT 50"
+            ).fetchall()
 
-        if app.action_result and app.action_result.startswith("go:"):
-            run_id = app.action_result[3:]
-            from .go import cmd_go
-            cmd_go([run_id], config)
+        app = RunListApp(rows, full_cwd, refresh_fn=_refresh_rows)
+        app.run(mouse=False)
+        conn.close()
+
+        if app.action_result and app.action_result.startswith("resume:"):
+            run_id = app.action_result[len("resume:"):]
+            from .resume import cmd_resume
+            cmd_resume([run_id], config)
         return
+
+    conn.close()
 
     header = ["RUN", "DATE", "PROMPT", "CWD"]
     if show_uuid:

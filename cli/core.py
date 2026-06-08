@@ -84,6 +84,7 @@ def get_db():
             run_id      TEXT NOT NULL UNIQUE,
             run_day     TEXT NOT NULL,
             uuid        TEXT NOT NULL UNIQUE,
+            session_id  TEXT,
             cwd         TEXT NOT NULL,
             prompt      TEXT NOT NULL,
             jsonl_path  TEXT NOT NULL,
@@ -106,6 +107,13 @@ def get_db():
     try:
         cursor = conn.execute("PRAGMA table_info(runs)")
         cols = {row[1] for row in cursor.fetchall()}
+        # In-place migration: add session_id and backfill from uuid for old rows.
+        if "session_id" not in cols:
+            conn.execute("ALTER TABLE runs ADD COLUMN session_id TEXT")
+            conn.execute(
+                "UPDATE runs SET session_id = uuid WHERE session_id IS NULL OR session_id = ''"
+            )
+            cols.add("session_id")
         missing = {"run_id", "seq_code", "run_day", "backend"} - cols
         if missing:
             print(
@@ -122,11 +130,23 @@ def get_db():
     return conn
 
 
-def create_run(conn: sqlite3.Connection, cwd: str, prompt_text: str, backend_name: str = ""):
+def create_run(
+    conn: sqlite3.Connection,
+    cwd: str,
+    prompt_text: str,
+    backend_name: str = "",
+    session_id: Optional[str] = None,
+):
     """Allocate a new run inside a BEGIN IMMEDIATE transaction.
 
     Assigns daily counter, seq_code, run_id, uuid, jsonl_path.
     Records the backend name used.
+
+    `session_id` is the underlying claude session to associate this run with.
+    For a fresh run it is None and defaults to the row's own uuid. For a
+    `resume` continuation it is the parent conversation's session_id, so the new
+    row (new run_id/seq/files) shares one claude session across turns.
+
     Returns (run_id, uuid, jsonl_path).  Caller must commit/rollback.
     """
     conn.execute("BEGIN IMMEDIATE")
@@ -150,14 +170,15 @@ def create_run(conn: sqlite3.Connection, cwd: str, prompt_text: str, backend_nam
     )
 
     seq_code = counter_to_seq_code(n)
-    run_id = f"dds-{mmdd}-{seq_code}"
+    run_id = f"ds-{mmdd}-{seq_code}"
     uid = str(_uuid.uuid4()).lower()
+    sess = session_id or uid
     jsonl_path = os.path.join(DB_DIR, f"{run_id}-{uid}.jsonl")
 
     conn.execute(
-        "INSERT INTO runs (seq, seq_code, run_id, run_day, uuid, cwd, prompt, jsonl_path, backend) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (n, seq_code, run_id, today_iso, uid, cwd, prompt_text, jsonl_path, backend_name),
+        "INSERT INTO runs (seq, seq_code, run_id, run_day, uuid, session_id, cwd, prompt, jsonl_path, backend) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (n, seq_code, run_id, today_iso, uid, sess, cwd, prompt_text, jsonl_path, backend_name),
     )
     return run_id, uid, jsonl_path
 

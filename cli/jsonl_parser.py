@@ -22,6 +22,9 @@ def _extract_time(obj: dict) -> str:
     if ts_str and isinstance(ts_str, str):
         try:
             dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            # Convert to local timezone (ISO timestamps from Claude are UTC)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone()
             return dt.strftime("%H:%M:%S")
         except (ValueError, TypeError):
             pass

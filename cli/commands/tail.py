@@ -41,6 +41,7 @@ def cmd_tail(argv: list[str], config=None):
         "date": row["created_at"],
         "cwd": short_path(row["cwd"]),
         "uuid": row["uuid"],
+        "out_path": out_path,
     }
 
     from ..jsonl_viewer import run_tail

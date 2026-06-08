@@ -69,10 +69,16 @@ def build_claude_args(
     model: Optional[str] = None,
     default_model: Optional[str] = None,
     pro_model: Optional[str] = None,
+    resume: bool = False,
 ) -> list[str]:
     """Build the claude CLI argument list from a resolved backend config.
 
     Returns a list like ["claude", "-p", prompt, "--dangerously-skip-permissions", ...]
+
+    When `resume` is True, the session identity flags come from
+    `continue_id_flags` (`--resume {session_id}`) instead of `session_id_flags`
+    (`--session-id {session_id}`), so the new turn is appended to an existing
+    claude conversation in print mode rather than opening a fresh session.
     """
     ctx = {
         "prompt": prompt,
@@ -94,8 +100,8 @@ def build_claude_args(
             args.append(resolved)
 
     if session_id:
-        session_id_flags = backend.get("session_id_flags", [])
-        for flag in session_id_flags:
+        id_flags_key = "continue_id_flags" if resume else "session_id_flags"
+        for flag in backend.get(id_flags_key, []):
             resolved = _resolve_env_val(flag, ctx)
             if resolved:
                 args.append(resolved)

@@ -2,7 +2,11 @@
 
 [中文](readme.md) · **English**
 
-A `claude` proxy: hand the "grunt work" to DeepSeek V4, keep the "thinking and acceptance" for your flagship model (Opus / GPT-5.5).
+Let **SOTA models (Opus / GPT-5.5)** do only what they're best at, and hand everything else to DeepSeek.
+
+`ds-cli` fans out execution to the background: each task runs in its own isolated context and returns just one result to your main session — under the hood it's a `claude` client wired to a DeepSeek endpoint.
+
+Flagship intelligence is expensive, so spend it only where it's irreplaceable; send the coding and testing to far cheaper DeepSeek — **same money, more done**.
 
 ## Why
 
@@ -35,7 +39,7 @@ Have your agent draw up a plan first, then hand execution to ds-cli.
 | --- | --- | --- |
 | Prompt | "Have `/ds-cli` execute the above task" | "Have `ds-agent` execute the above task" |
 | Mechanism | Directly triggers the `ds-cli` command (background shell) | Spins up a subagent to run in the background |
-| Watch progress | Expand the background shell view or `ds-cli tail` | Subagent view or `ds-cli tail` |
+| Watch progress | Expand the background shell view or `ds-cli tail` | `ds-cli tail` |
 
 <details>
 <summary>Why aren't the Codex/Claude mechanisms the same?</summary>
@@ -43,7 +47,7 @@ Have your agent draw up a plan first, then hand execution to ds-cli.
 <br>
 
 - **Claude Code has excellent background-shell support**: it can sense a task's "completion" via **notification**, and watch progress in real time (stderr). So you just run `ds-cli` in a background shell — the main session is never blocked and barely spends any tokens.
-- **Codex has no notifications, only polling**: every poll costs one cache read of the main session, which burns a lot of tokens for tasks that easily take 5–10 minutes. But Codex can sense a **subagent's completion event** — so we instead use a cheap model (`gpt-5.4-low`) as the subagent, call `ds-cli` in a **blocking** fashion, and notify the main session once the result comes back.
+- **Codex has no notifications, only polling**: every poll costs one cache read of the main session, which burns a lot of tokens for tasks that easily take 5–10 minutes. But Codex can sense a **subagent's completion event** — so we instead use a cheap model (`gpt-5.4-low`) as the subagent, call `ds-cli run --from codex` in a **blocking** fashion, and return only one `RESULT=` path to the main session after completion.
   - Why not the even cheaper `gpt-5.4-mini`? Its instruction-following is too poor — it does the work itself instead of dutifully handing the task off to ds-cli.
 
 </details>
@@ -62,7 +66,7 @@ Each task is dispatched as a **background shell command**; click to watch ds-cli
 
 > Make a plan, and have `ds-agent` execute the above task.
 
-Codex spins up a subagent to run in the background; you watch progress in the subagent view.
+Codex spins up a subagent to run in the background. To avoid pulling large results into the subagent context, `ds-agent` returns only one `RESULT=` line after completion; use `ds-cli tail` when you need progress.
 
 <!-- replace with: assets/codex.jpg — suggested 621 wide — re-shoot a full image where the text isn't cut off on the right. -->
 <img src="assets/codex.jpg" width="621" alt="Codex invoking the ds-agent subagent">
@@ -99,7 +103,7 @@ Once a task is dispatched, there are two ways to watch its progress — and even
 <!-- replace with: assets/list-tui.jpg — suggested ~480 wide — curses list + detail view, circling the G/C shortcuts. -->
 <img src="assets/list-tui.jpg" width="100%" alt="ds-cli list interactive TUI">
 <br>
-In `ds-cli list`, select a row and press `G`, or run `ds-cli go <run-id>` directly, to reload that session with claude via the backend and keep chatting.
+In `ds-cli list`, select a row and press `G`, or run `ds-cli resume <seq>` directly, to reload that session with claude via the backend and keep chatting. You can also send a follow-up task non-interactively to the same session with `ds-cli resume <seq> - <<'EOF' ... EOF`.
 </td>
 <td valign="top">
 
@@ -179,5 +183,5 @@ For the full config (local OpenCode proxy, model / system prompt overrides, all 
 
 ## More
 
-- **[Command reference →](docs/cli-reference.zh-CN.md)** — all usage of `run` / `list` / `go` / `tail` / `install` / `update`, run id encoding and on-disk file layout.
+- **[Command reference →](docs/cli-reference.zh-CN.md)** — all usage of `run` / `list` / `resume` / `tail` / `install` / `update`, run id encoding and on-disk file layout.
 - **[Configuration docs →](docs/configuration.zh-CN.md)** — backend merge mechanism, OpenCode proxy, full table of overridable fields.

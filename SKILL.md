@@ -1,6 +1,6 @@
 ---
 name: ds-cli
-description: 把一个独立的编码或调查任务整包交给 ds-cli 执行。后台运行，完成后自动通知。支持并行多任务。
+description: 把一个独立的编码或调查任务整包交给 ds-cli 执行。后台运行，完成后自动通知。支持并行多任务，支持续接（resume）上次会话继续派发后续任务。
 ---
 
 # ds-cli Skill
@@ -27,7 +27,9 @@ __DS_EOF__
 
 **启动命令后**（`run_in_background: true` 返回后），**从 stdout 捕获 ds-cli 打印的唯一有用的一行 `RESULT=<绝对路径>`**，并在面向用户的 assistant 消息里回显这一条路径（完成后默认只读它）：
 
-- `RESULT=<绝对路径>`（最终结论文件，例如 `/Users/sam/.ds-cli/tasks/ds-01-0604.result.md`）
+- `RESULT=<绝对路径>`（最终结论文件，例如 `/Users/sam/.ds-cli/tasks/ds-0608-07.result.md`）
+
+**这条路径里同时编码了本次任务的 run_id**：去掉目录和 `.result.md` 后缀，文件名主干就是 run_id（上例 → `ds-0608-07`）。**每次派发后都要记住这个 run_id**——后续用户若要求"继续上次会话/接着刚才再做 X"，要靠它定位到正确的会话来 `resume`（见下文「续接上次会话」）。
 
 其余无需你读取：
 - ds-cli 把克制的进度信息打在 **stderr**，Claude Code 的 shell view 会自动实时显示——你不用、也不要把它读进上下文。
@@ -52,6 +54,21 @@ __DS_EOF__
 ### 串行多任务
 
 等上一个任务的完成通知到达，读取并汇报结果后，再启动下一个任务。
+
+## 续接上次会话（resume 续派）
+
+要接着某次任务继续（保留其上下文）而非开新会话时，用 `resume` 替代 `run`，其余约定（后台、捕获新 `RESULT=`、读 `.result.md`）完全相同：
+
+```bash
+ds-cli resume <run_id> - <<'__DS_EOF__'
+[后续任务内容]
+__DS_EOF__
+```
+
+- `<run_id>` 用该会话**首次**任务的 run_id（即上文那个文件名主干）；它是稳定句柄，每轮续接都用它，不要追每轮新生成的 run_id。
+- **必须带 prompt**（`-`/heredoc 或 `--text`）。不带 prompt 的 `resume <run_id>` 是交互式重开，后台会卡死。
+- 续接默认只继承 backend；原会话用过 `--fast`/`--pro` 的话，续接要再次带上才沿用同档模型。
+- 不确定用户指哪次任务时，报候选 run_id + 摘要让其确认，别猜。
 
 ## 完成后
 

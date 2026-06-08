@@ -17,6 +17,7 @@ def execute_run(
     uid: str,
     jsonl_path: str,
     task_paths_tuple,
+    caller: str = "",
 ):
     """Execute a claude run: pipe output to JSONL, display progress, extract result.
 
@@ -26,10 +27,22 @@ def execute_run(
     ["script", "-q", "/dev/null", "claude", ...] (wrapping happens in the command function).
     """
     _, out_path, result_path = task_paths_tuple
+    codex_mode = caller == "codex"
 
     def update_status(status: str):
         conn.execute("UPDATE runs SET status = ? WHERE uuid = ?", (status, uid))
         conn.commit()
+
+    def finish_success(result_text: str):
+        update_status("success")
+        conn.close()
+        with open(result_path, "w") as rf:
+            rf.write(result_text)
+        if codex_mode:
+            print(f"RESULT={result_path}")
+        else:
+            print(result_text)
+        sys.exit(0)
 
     proc = subprocess.Popen(
         cmd,
@@ -74,7 +87,8 @@ def execute_run(
 
                     ts = event.ts or datetime.datetime.now().strftime("%H:%M:%S")
                     disp = f"{ts} {plan_text}"
-                    print(disp, file=sys.stderr, flush=True)
+                    if not codex_mode:
+                        print(disp, file=sys.stderr, flush=True)
                     of.write(disp + "\n")
                     of.flush()
                     last_plan = plan_text
@@ -87,36 +101,32 @@ def execute_run(
             proc.kill()
             proc.wait()
         update_status("interrupted")
-        print("\nds-cli run: interrupted", file=sys.stderr)
         with open(result_path, "w") as rf:
             rf.write("INTERRUPTED\n")
+        if codex_mode:
+            print(f"RESULT={result_path}")
+        else:
+            print("\nds-cli run: interrupted", file=sys.stderr)
         conn.close()
         sys.exit(130)
 
     proc.wait()
 
     if result_seen:
-        update_status("success")
-        conn.close()
-        with open(result_path, "w") as rf:
-            rf.write(result)
-        print(result)
-        sys.exit(0)
+        finish_success(result)
 
     result = extract_result(jsonl_path)
     if result:
-        update_status("success")
-        conn.close()
-        with open(result_path, "w") as rf:
-            rf.write(result)
-        print(result)
-        sys.exit(0)
+        finish_success(result)
 
     update_status("error")
     diag = f"ds-cli run: no successful result found; exit status {proc.returncode}\nJSONL={jsonl_path}\n"
-    print(diag.rstrip(), file=sys.stderr)
-    print(f"JSONL={jsonl_path}", file=sys.stderr)
+    if not codex_mode:
+        print(diag.rstrip(), file=sys.stderr)
+        print(f"JSONL={jsonl_path}", file=sys.stderr)
     with open(result_path, "w") as rf:
         rf.write(diag)
+    if codex_mode:
+        print(f"RESULT={result_path}")
     conn.close()
     sys.exit(1)
