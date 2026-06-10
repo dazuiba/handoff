@@ -12,20 +12,20 @@ def usage(config=None):
   handoff --help
   handoff init      [-y|--yes]
   handoff list      [--uuid] [--cwd]
-  handoff run       [--cwd <dir>] [--fast] [--pro] (<input-file|-> | --text <prompt...>)
-  handoff resume    [<run-id|seq>] [--fast] [--pro] [--cwd <dir>] [(<input-file|-> | --text <prompt...>)]
+  handoff run       [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <prompt...>)
+  handoff resume    [<run-id|seq>] [--pro] [--cwd <dir>] [(<input-file|-> | --text <prompt...>)]
   handoff tail [<run-id|seq>]
 
   handoff list             — browse and inspect your past sessions
-  handoff run --text hi    — quick smoke-test / debug your config.yml
-  handoff resume <seq>     — reopen a past conversation in claude (interactive)
+  handoff run --text hi    — quick smoke-test / debug your config.yaml
+  handoff resume <seq>     — reopen a past conversation (interactive)
   handoff resume <seq> -   — dispatch a follow-up task to that conversation (heredoc/--text)
   handoff tail             — live-tail a run's stream
 
 Run ids: hd-<MMDD>-<SEQ_CODE>  (seq_code: daily counter, 01..99, A0..ZZ)
 --cwd defaults to the current directory of the calling process.
---fast uses fast_backend from ~/.handoff/config.yaml.
---pro uses the pro model profile on the selected backend."""
+--backend picks a backend (bundled: deepseek, opus, codex; default: default_backend).
+--pro uses the backend's pro_model. A resume stays on its original backend."""
     )
 
 

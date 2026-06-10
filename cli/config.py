@@ -7,14 +7,16 @@ Configuration flow:
      the defaults are deep-merged first, then the user config overrides them.
 
 Backend resolution:
-  - Resolved backend = backend_template + specific backend overrides
-  - Template fields are defaults; backends can override any field
-  - Backend instances only come from ~/.handoff/config.yaml
+  - Resolved backend = type_defaults[<type>] + the backend's own fields
+  - type_defaults carry the type-level launch contract (command, flags, env, PTY);
+    each backend supplies its instance fields (endpoint, token, model)
+  - The bundled defaults ship usable backends; the user config only adds a token
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
 import copy
 from typing import Optional
@@ -31,25 +33,28 @@ except ImportError:
 _DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "default_config.yaml")
 _DEFAULT_USER_CONFIG = """# handoff user configuration — overrides only.
 #
-# Bundled defaults (models, backend_template, system_prompt) are layered
-# underneath this file automatically; you never need to point at the source
-# tree. To see everything you can override, read cli/default_config.yaml in
-# the handoff repo. Use `include:` only for your own extra config files.
+# Bundled defaults (three backends: deepseek / opus / codex, plus the
+# type-level launch contract) are layered underneath this file automatically.
+# To see everything you can override, read cli/default_config.yaml in the
+# handoff repo.
+#
+# The bundled `opus` (local claude login) and `codex` (local codex login)
+# backends are zero-config. Only `deepseek` needs a token. Two ways to supply it:
+#
+#   1. Set it here:
+#        backends:
+#          deepseek:
+#            env:
+#              ANTHROPIC_AUTH_TOKEN: "sk-..."
+#
+#   2. Or export DEEPSEEK_API_KEY in your shell and leave this file empty —
+#      the bundled config reads ANTHROPIC_AUTH_TOKEN from ${DEEPSEEK_API_KEY}.
 
-default_backend: default
-fast_backend: default
-
-backends:
-  default:
-    description: "DeepSeek API"
-    env:
-      ANTHROPIC_AUTH_TOKEN: "<YOUR_TOKEN>"
-
-  # opencode:
-  #   description: "Local OpenCode proxy"
-  #   env:
-  #     ANTHROPIC_BASE_URL: "http://127.0.0.1:4000"
-  #     ANTHROPIC_AUTH_TOKEN: "unused"
+# Uncomment and fill in to set the deepseek token in this file:
+# backends:
+#   deepseek:
+#     env:
+#       ANTHROPIC_AUTH_TOKEN: "<YOUR_DEEPSEEK_TOKEN>"
 """
 
 
@@ -115,6 +120,31 @@ def _deep_merge(base: dict, override: dict) -> dict:
         else:
             result[key] = copy.deepcopy(val)
     return result
+
+
+_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_env_vars(value):
+    """Recursively expand ${ENV_VAR} references in config string values.
+
+    Unset variables expand to the empty string (later caught by
+    ensure_backend_token_ready when a real token is required).
+    """
+    if isinstance(value, str):
+        return _ENV_VAR_RE.sub(lambda m: os.environ.get(m.group(1), ""), value)
+    if isinstance(value, dict):
+        return {k: _expand_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(v) for v in value]
+    return value
+
+
+# Top-level config keys removed in the multi-backend refactor. Reading them from
+# an old user config is harmless — warn once and ignore rather than crash.
+# default_model / pro_model are additionally kept as a fallback for legacy
+# backends that don't carry their own model field.
+_DEPRECATED_KEYS = ("fast_backend", "backend_template", "default_model", "pro_model")
 
 
 def _resolve_include_path(include_val: str, including_file_dir: str) -> str:
@@ -193,8 +223,30 @@ class Config:
         # never needs to reference the source tree.
         defaults = _load_yaml(_DEFAULT_CONFIG_PATH)
         user = _load_with_includes(user_config_path())
+        self._legacy_default_model = ""
+        self._legacy_pro_model = ""
+        self._warn_deprecated(user)
         self._merged = _deep_merge(defaults, user)
         self._validate()
+
+    def _warn_deprecated(self, user: dict):
+        """Warn about (and drop) top-level keys removed in the multi-backend refactor.
+
+        Legacy default_model / pro_model are remembered and used as a fallback
+        for user-defined backends that don't carry their own model field, so an
+        old config keeps working with one warning instead of a silent break.
+        """
+        self._legacy_default_model = user.get("default_model") or ""
+        self._legacy_pro_model = user.get("pro_model") or ""
+        for key in _DEPRECATED_KEYS:
+            if key in user:
+                print(
+                    f"handoff: config key '{key}' is deprecated and was ignored "
+                    f"(backends now carry their own model/pro_model; "
+                    f"use --backend to pick a backend)",
+                    file=sys.stderr,
+                )
+                user.pop(key, None)
 
     @property
     def merged(self) -> dict:
@@ -209,45 +261,49 @@ class Config:
         return self._required("default_backend")
 
     @property
-    def fast_backend(self) -> str:
-        return self._required("fast_backend")
-
-    @property
-    def default_model(self) -> str:
-        return self._required("default_model")
-
-    @property
-    def pro_model(self) -> str:
-        return self._required("pro_model")
-
-    @property
     def system_prompt(self) -> str:
         return self._merged.get("system_prompt", "")
 
     @property
-    def backend_template(self) -> dict:
-        return copy.deepcopy(self._merged.get("backend_template", {}))
+    def type_defaults(self) -> dict:
+        return copy.deepcopy(self._merged.get("type_defaults", {}))
 
     @property
     def backends(self) -> dict:
-        """Return the resolved backends dict (merged with template)."""
+        """Return the resolved backends dict.
+
+        Resolution per backend: type_defaults[<type>] -> backend's own fields
+        (deep merge; lists replaced wholesale). String values get ${ENV_VAR}
+        interpolation. Every resolved backend carries a `type` key
+        (defaults to "claude" when omitted).
+        """
         raw = self._merged.get("backends", {})
         if not isinstance(raw, dict):
             print("handoff: config key 'backends' must be a mapping", file=sys.stderr)
             sys.exit(1)
+        type_defaults = self._merged.get("type_defaults", {}) or {}
         result = {}
-        template = self.backend_template
         for name, overrides in raw.items():
             if not isinstance(overrides, dict):
                 print(f"handoff: backend '{name}' must be a mapping", file=sys.stderr)
                 sys.exit(1)
-            merged = _deep_merge(template, overrides)
-            result[name] = merged
+            btype = overrides.get("type", "claude")
+            base = type_defaults.get(btype)
+            if not isinstance(base, dict):
+                base = {}
+            merged = _deep_merge(base, overrides)
+            merged["type"] = btype
+            # legacy fallback: pre-refactor configs carried the model at top level
+            if not merged.get("model") and self._legacy_default_model:
+                merged["model"] = self._legacy_default_model
+            if not merged.get("pro_model") and self._legacy_pro_model:
+                merged["pro_model"] = self._legacy_pro_model
+            result[name] = _expand_env_vars(merged)
         return result
 
     def get_backend(self, name: str) -> Optional[dict]:
         """Resolve a named backend (returns deep-copied merged dict or None)."""
-        backends = self.backends  # already merged with template
+        backends = self.backends  # already merged with type defaults
         return copy.deepcopy(backends.get(name))
 
     def get_config_paths(self) -> list[str]:
@@ -266,24 +322,35 @@ class Config:
         return val
 
     def _validate(self):
-        template = self._merged.get("backend_template", {})
-        if not isinstance(template, dict) or not template:
-            print("handoff: missing required config mapping: backend_template", file=sys.stderr)
-            sys.exit(1)
-
         backends = self._merged.get("backends", {})
         if not isinstance(backends, dict) or not backends:
             print(
-                "handoff: ~/.handoff/config.yaml must define at least one backend under 'backends'",
+                "handoff: no backends configured (bundled defaults missing or overridden away)",
                 file=sys.stderr,
             )
             sys.exit(1)
 
-        for key in ("default_backend", "fast_backend"):
-            backend_name = self._required(key)
-            if backend_name not in backends:
+        type_defaults = self._merged.get("type_defaults", {})
+        if not isinstance(type_defaults, dict) or not type_defaults:
+            print("handoff: missing required config mapping: type_defaults", file=sys.stderr)
+            sys.exit(1)
+
+        backend_name = self._required("default_backend")
+        if backend_name not in backends:
+            print(
+                f"handoff: config key 'default_backend' points to unknown backend '{backend_name}'",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        for name, overrides in backends.items():
+            if not isinstance(overrides, dict):
+                continue  # reported when resolving
+            btype = overrides.get("type", "claude")
+            if btype not in type_defaults:
                 print(
-                    f"handoff: config key '{key}' points to unknown backend '{backend_name}'",
+                    f"handoff: backend '{name}' has unknown type '{btype}' "
+                    f"(known: {', '.join(sorted(type_defaults.keys()))})",
                     file=sys.stderr,
                 )
                 sys.exit(1)

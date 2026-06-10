@@ -1,18 +1,27 @@
 """Backend resolution and command building for handoff.
 
-Given a resolved backend configuration (merged from backend_template + specific
-backend overrides in YAML), this module provides:
+Given a resolved backend configuration (merged from type_defaults[<type>] + the
+backend's own fields in YAML), this module provides:
 
-  - set_backend_env(backend, ...): Set environment variables for Claude
-  - build_claude_args(backend, ...): Build claude CLI argument list
+  - set_backend_env(backend, ...): Set environment variables for the backend CLI
+  - build_args(backend, ...): Build the CLI argument list (claude or codex)
+
+Backend types:
+  claude — `claude -p ... --output-format stream-json` against any
+           anthropic-compatible endpoint; identity flags combine with
+           session_flags (`--session-id` fresh / `--resume` continuation).
+  codex  — `codex exec --json ...`; a fresh run takes session_flags alone
+           (codex assigns the thread id itself), a continuation uses
+           continue_id_flags *instead of* session_flags because
+           `codex exec resume` accepts a different flag set.
 
 Placeholder substitution:
   {prompt}         — the prompt text
-  {session_id}     — session UUID
+  {session_id}     — session UUID / codex thread id
   {system_prompt}  — configured system prompt
-  {model}          — resolved model name (default_model or pro_model)
-  {default_model}  — configured default_model
-  {pro_model}      — configured pro_model
+  {model}          — resolved model name (backend's model or pro_model)
+  {pro_model}      — backend's pro_model
+  {cwd}            — working directory of the run
   {home}           — $HOME
 """
 
@@ -36,65 +45,83 @@ def _resolve_env_val(val, ctx: dict):
     return val
 
 
-def set_backend_env(backend: dict, default_model: str, pro_model: str, model: str):
-    """Set environment variables for the Claude backend.
+def _base_ctx(backend: dict, model: str = "", pro_model: str = "", cwd: str = "") -> dict:
+    return {
+        "prompt": "",
+        "session_id": "",
+        "system_prompt": backend.get("_system_prompt", ""),
+        "model": model or backend.get("_resolved_model", ""),
+        "pro_model": pro_model or backend.get("pro_model", ""),
+        # legacy alias kept so old user configs with {default_model} don't crash
+        "default_model": model or backend.get("_resolved_model", ""),
+        "cwd": cwd,
+        "home": os.path.expanduser("~"),
+    }
+
+
+def backend_type(backend: dict) -> str:
+    return backend.get("type", "claude")
+
+
+def set_backend_env(backend: dict, model: str, pro_model: str = ""):
+    """Set environment variables for the backend CLI.
 
     Iterates the backend's 'env' mapping, substitutes placeholders,
     and sets each key=value in os.environ.
     """
-    ctx = {
-        "default_model": default_model,
-        "pro_model": pro_model,
-        "model": model,
-        "home": os.path.expanduser("~"),
-    }
+    ctx = _base_ctx(backend, model=model, pro_model=pro_model)
 
     env_map = backend.get("env", {})
     for key, val in env_map.items():
         resolved = _resolve_env_val(val, ctx)
+        # an empty value (e.g. a model-less legacy backend resolving
+        # ANTHROPIC_MODEL="{model}") must not be exported — an empty env var
+        # breaks the CLI where an unset one would not
+        if resolved == "":
+            continue
         os.environ[key] = resolved
 
-    # Handle CLAUDE_CONFIG_DIR defaults
-    if "CLAUDE_CONFIG_DIR" not in os.environ or not os.environ["CLAUDE_CONFIG_DIR"]:
-        os.environ["CLAUDE_CONFIG_DIR"] = os.environ.get(
-            "CLAUDE_CONFIG_DIR",
-            os.path.expanduser("~/.claude"),
-        )
+    # claude needs a config dir; codex backends have no ANTHROPIC_*/CLAUDE_* env
+    if backend_type(backend) == "claude":
+        if not os.environ.get("CLAUDE_CONFIG_DIR"):
+            os.environ["CLAUDE_CONFIG_DIR"] = os.path.expanduser("~/.claude")
 
 
-def build_claude_args(
+def build_args(
     backend: dict,
     prompt: str,
     session_id: Optional[str] = None,
     model: Optional[str] = None,
-    default_model: Optional[str] = None,
     pro_model: Optional[str] = None,
     resume: bool = False,
+    cwd: str = "",
 ) -> list[str]:
-    """Build the claude CLI argument list from a resolved backend config.
+    """Build the backend CLI argument list from a resolved backend config.
 
-    Returns a list like ["claude", "-p", prompt, "--dangerously-skip-permissions", ...]
+    claude type: session_flags carry -p/{prompt}/stream-json/etc.; when a
+    session_id is present, `continue_id_flags` (--resume, continuation) or
+    `session_id_flags` (--session-id, fresh) are appended on top.
 
-    When `resume` is True, the session identity flags come from
-    `continue_id_flags` (`--resume {session_id}`) instead of `session_id_flags`
-    (`--session-id {session_id}`), so the new turn is appended to an existing
-    claude conversation in print mode rather than opening a fresh session.
+    codex type: a fresh run is session_flags alone (`codex exec --json ...`;
+    codex assigns the thread id itself, reported via the thread.started event).
+    A continuation is continue_id_flags alone (`codex exec resume --json <id>
+    <prompt>`) because `codex exec resume` rejects --sandbox/-C.
     """
-    ctx = {
-        "prompt": prompt,
-        "session_id": session_id or "",
-        "system_prompt": backend.get("_system_prompt", ""),
-        "model": model or backend.get("_resolved_model", ""),
-        "default_model": default_model or "",
-        "pro_model": pro_model or "",
-        "home": os.path.expanduser("~"),
-    }
+    ctx = _base_ctx(backend, model=model or "", pro_model=pro_model or "", cwd=cwd)
+    ctx["prompt"] = prompt
+    ctx["session_id"] = session_id or ""
 
-    claude_cmd = _resolve_env_val(backend.get("claude_command", "claude"), ctx)
-    args = [claude_cmd]
+    command = _resolve_env_val(backend.get("command") or backend.get("claude_command", "claude"), ctx)
+    args = [command]
 
-    flags = backend.get("session_flags", [])
-    for flag in flags:
+    if backend_type(backend) == "codex" and resume and session_id:
+        for flag in backend.get("continue_id_flags", []):
+            resolved = _resolve_env_val(flag, ctx)
+            if resolved:
+                args.append(resolved)
+        return args
+
+    for flag in backend.get("session_flags", []):
         resolved = _resolve_env_val(flag, ctx)
         if resolved:
             args.append(resolved)
@@ -114,40 +141,23 @@ def wrap_with_pty(backend: dict, args: list[str]) -> list[str]:
     pty = backend.get("pty", [])
     if not pty:
         return args
-    ctx = {
-        "home": os.path.expanduser("~"),
-        "prompt": "",
-        "session_id": "",
-        "system_prompt": backend.get("_system_prompt", ""),
-        "model": backend.get("_resolved_model", ""),
-        "default_model": "",
-        "pro_model": "",
-    }
+    ctx = _base_ctx(backend)
     return [_resolve_env_val(part, ctx) for part in pty] + args
 
 
 def build_resume_args(
     backend: dict,
     session_id: str,
-    default_model: Optional[str] = None,
     pro_model: Optional[str] = None,
 ) -> list[str]:
-    """Build claude resume argument list (for 'go' command)."""
-    ctx = {
-        "prompt": "",
-        "session_id": session_id or "",
-        "system_prompt": backend.get("_system_prompt", ""),
-        "model": backend.get("_resolved_model", ""),
-        "default_model": default_model or "",
-        "pro_model": pro_model or "",
-        "home": os.path.expanduser("~"),
-    }
+    """Build the interactive resume argument list (`claude --resume` / `codex resume`)."""
+    ctx = _base_ctx(backend, pro_model=pro_model or "")
+    ctx["session_id"] = session_id or ""
 
-    claude_cmd = _resolve_env_val(backend.get("claude_command", "claude"), ctx)
-    args = [claude_cmd]
+    command = _resolve_env_val(backend.get("command") or backend.get("claude_command", "claude"), ctx)
+    args = [command]
 
-    flags = backend.get("resume_flags", [])
-    for flag in flags:
+    for flag in backend.get("resume_flags", []):
         resolved = _resolve_env_val(flag, ctx)
         if resolved:
             args.append(resolved)
@@ -155,30 +165,37 @@ def build_resume_args(
     return args
 
 
-def resolve_backend_model(backend: dict, default_model: str, pro_model: str, is_pro: bool = False) -> str:
-    """Return the model name for this backend.
-
-    If the backend specifies its own model fields, use those;
-    otherwise fall back to the configured default/pro model.
-    """
-    model_key = "pro_model" if is_pro else "default_model"
-    model = backend.get(model_key)
-    if not model:
-        model = pro_model if is_pro else default_model
-
-    # Substitution
-    ctx = {"default_model": default_model, "pro_model": pro_model, "home": os.path.expanduser("~")}
-    resolved = _resolve_env_val(model, ctx)
-    return resolved
+def resolve_backend_model(backend: dict, is_pro: bool = False) -> str:
+    """Return the model name for this backend (its own model / pro_model field)."""
+    model = backend.get("pro_model" if is_pro else "model") or backend.get("model") or ""
+    ctx = {"home": os.path.expanduser("~")}
+    return _resolve_env_val(model, ctx) if model else ""
 
 
 def ensure_backend_token_ready(backend_name: str, backend: dict, user_config_path: str):
-    """Fail fast when the selected backend still uses a placeholder token."""
-    token = backend.get("env", {}).get("ANTHROPIC_AUTH_TOKEN")
+    """Fail fast when the selected backend declares a token that isn't usable.
+
+    Only applies to backends whose env carries ANTHROPIC_AUTH_TOKEN (e.g. the
+    bundled deepseek). Backends that ride on local login state (opus, codex)
+    declare no token and are skipped. An empty value typically means an
+    unexpanded ${ENV_VAR} reference (variable not set in the environment).
+    """
+    env_map = backend.get("env", {})
+    if "ANTHROPIC_AUTH_TOKEN" not in env_map:
+        return
+    token = env_map.get("ANTHROPIC_AUTH_TOKEN")
     if isinstance(token, str) and token.startswith("<"):
         print(
             f"handoff: backend '{backend_name}' still uses placeholder token {token}. "
             f"Edit {user_config_path} and set a real ANTHROPIC_AUTH_TOKEN.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if not token:
+        print(
+            f"handoff: backend '{backend_name}' has an empty ANTHROPIC_AUTH_TOKEN. "
+            f"Set it in {user_config_path}, or export the environment variable it "
+            f"references (e.g. DEEPSEEK_API_KEY).",
             file=sys.stderr,
         )
         sys.exit(2)

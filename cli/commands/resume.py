@@ -22,11 +22,11 @@ from ..config import Config
 
 
 def cmd_resume(argv: list[str], config: Config):
-    """handoff resume [<run-id|seq>] [--fast] [--pro] [--cwd <dir>]
+    """handoff resume [<run-id|seq>] [--backend <name>] [--pro] [--cwd <dir>]
     [(<input-file|-> | --text <prompt...>)]."""
-    fast = False
     pro = False
     cwd = ""
+    backend_arg = ""
     selector = ""
     input_src = ""
     text_mode = False
@@ -45,8 +45,13 @@ def cmd_resume(argv: list[str], config: Config):
                 sys.exit(2)
             cwd = argv[i]
         elif a == "--backend":
-            print("handoff: --backend has been removed; use --fast or edit ~/.handoff/config.yaml", file=sys.stderr)
-            sys.exit(2)
+            i += 1
+            if i >= len(argv):
+                print("handoff resume: --backend requires a value", file=sys.stderr)
+                sys.exit(2)
+            backend_arg = argv[i]
+        elif a.startswith("--backend="):
+            backend_arg = a.split("=", 1)[1]
         elif a == "--text":
             text_mode = True
             if input_src:
@@ -70,8 +75,6 @@ def cmd_resume(argv: list[str], config: Config):
             break
         elif a == "--pro":
             pro = True
-        elif a == "--fast":
-            fast = True
         elif a in ("-h", "--help"):
             from ..main import usage
             usage()
@@ -127,11 +130,17 @@ def cmd_resume(argv: list[str], config: Config):
         print(f"handoff resume: cwd not found: {cwd}", file=sys.stderr)
         sys.exit(2)
 
-    # Backend: --fast wins; otherwise the conversation's saved backend, else default.
-    if fast:
-        backend_name = config.fast_backend
-    else:
-        backend_name = saved_backend or config.default_backend
+    # A continuation must stay on the conversation's original backend — the
+    # session id only means something to the CLI that created it.
+    if backend_arg and saved_backend and backend_arg != saved_backend:
+        print(
+            f"handoff resume: this conversation belongs to backend '{saved_backend}'; "
+            f"it cannot be resumed with --backend {backend_arg}. "
+            f"Use `handoff run --backend {backend_arg}` to start a new conversation.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    backend_name = saved_backend or backend_arg or config.default_backend
 
     if prompt_text is None:
         # Interactive: reopen the conversation in claude (replaces this process).
@@ -154,16 +163,15 @@ def _resume_interactive(config: Config, backend_name: str, session_id: str, cwd:
         )
         sys.exit(2)
 
-    model = resolve_backend_model(backend_cfg, config.default_model, config.pro_model, pro)
+    model = resolve_backend_model(backend_cfg, pro)
     backend_cfg["_resolved_model"] = model
     backend_cfg["_system_prompt"] = config.system_prompt
 
-    set_backend_env(backend_cfg, config.default_model, config.pro_model, model)
+    set_backend_env(backend_cfg, model, backend_cfg.get("pro_model", ""))
 
     args = build_resume_args(
         backend_cfg, session_id,
-        default_model=config.default_model,
-        pro_model=config.pro_model,
+        pro_model=backend_cfg.get("pro_model", ""),
     )
 
     print(f"cd {short_path(cwd)}; {' '.join(shlex.quote(p) for p in args)}", file=sys.stderr)

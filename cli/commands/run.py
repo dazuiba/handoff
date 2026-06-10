@@ -9,7 +9,8 @@ import datetime
 from ..core import get_db, create_run, task_paths, UUID_RE
 from ..backend import (
     set_backend_env,
-    build_claude_args,
+    build_args,
+    backend_type,
     ensure_backend_token_ready,
     resolve_backend_model,
     wrap_with_pty,
@@ -19,10 +20,10 @@ from ..config import Config
 
 
 def cmd_run(argv: list[str], config: Config):
-    """handoff run [--cwd <dir>] [--fast] [--pro] (<input-file|-> | --text <prompt...>)."""
-    fast = False
+    """handoff run [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <prompt...>)."""
     pro = False
     cwd = ""
+    backend_arg = ""
     input_src = ""
     text_mode = False
     text_parts = []
@@ -39,8 +40,13 @@ def cmd_run(argv: list[str], config: Config):
                 sys.exit(2)
             cwd = argv[i]
         elif a == "--backend":
-            print("handoff: --backend has been removed; use --fast or edit ~/.handoff/config.yaml", file=sys.stderr)
-            sys.exit(2)
+            i += 1
+            if i >= len(argv):
+                print("handoff run: --backend requires a value", file=sys.stderr)
+                sys.exit(2)
+            backend_arg = argv[i]
+        elif a.startswith("--backend="):
+            backend_arg = a.split("=", 1)[1]
         elif a == "--text":
             text_mode = True
             if input_src:
@@ -68,8 +74,6 @@ def cmd_run(argv: list[str], config: Config):
             from ..main import usage
             usage()
             sys.exit(0)
-        elif a == "--fast":
-            fast = True
         elif a == "--":
             i += 1
             if i < len(argv):
@@ -111,7 +115,7 @@ def cmd_run(argv: list[str], config: Config):
         print("handoff run: input file required, or use --text <prompt...> / pipe via '-'", file=sys.stderr)
         sys.exit(2)
 
-    backend_name = config.fast_backend if fast else config.default_backend
+    backend_name = backend_arg or config.default_backend
 
     _execute(cwd, prompt_text, backend_name, pro, config)
 
@@ -155,32 +159,45 @@ def _execute(
         pf.write(prompt_text)
 
     # Resolve model
-    model = resolve_backend_model(backend_cfg, config.default_model, config.pro_model, pro)
+    model = resolve_backend_model(backend_cfg, pro)
+    if not model:
+        print(
+            f"handoff: backend '{backend_name}' resolves no model. "
+            f"Set backends.{backend_name}.model in {config.user_config_path} "
+            f"(pre-0.3 configs carried this in the now-removed top-level default_model).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     backend_cfg["_resolved_model"] = model
     backend_cfg["_system_prompt"] = config.system_prompt
 
-    set_backend_env(backend_cfg, config.default_model, config.pro_model, model)
+    btype = backend_type(backend_cfg)
+    set_backend_env(backend_cfg, model, backend_cfg.get("pro_model", ""))
     if resume_session_id:
         session_id = resume_session_id
-    else:
+    elif btype == "claude":
         session_id = uid if UUID_RE.match(uid) else None
+    else:
+        # codex assigns the thread id itself; it arrives via the
+        # thread.started event and is persisted by execute_run
+        session_id = None
 
     print(f"RESULT={result_path}")
     print(f"RESULT={result_path}", file=sys.stderr)
 
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     label = "resume" if resume_session_id else "start"
-    print(f"{ts} {label}\tSESSION={session_id}", file=sys.stderr)
+    print(f"{ts} {label}\tSESSION={session_id or 'pending'}", file=sys.stderr)
 
-    # build claude command (wrapped in script for pty)
-    claude_cmd = build_claude_args(
+    # build backend command (wrapped in script for pty when the type needs it)
+    backend_cmd = build_args(
         backend_cfg, prompt_text, session_id,
         model=model,
-        default_model=config.default_model,
-        pro_model=config.pro_model,
+        pro_model=backend_cfg.get("pro_model", ""),
         resume=bool(resume_session_id),
+        cwd=cwd,
     )
-    cmd = wrap_with_pty(backend_cfg, claude_cmd)
+    cmd = wrap_with_pty(backend_cfg, backend_cmd)
 
     execute_run(
         cwd,
@@ -190,4 +207,5 @@ def _execute(
         uid,
         jsonl_path,
         (prompt_path, out_path, result_path),
+        backend_type=btype,
     )
