@@ -9,27 +9,24 @@ A CLI proxy for `claude` that dispatches coding tasks to configurable AI backend
 ## Commands
 
 ```bash
-# No install needed if uv is on PATH — the entry point uses PEP 723 inline metadata
-./ds-cli --help
+# Install: uv tool install -e .  then run init
+handoff --help
 
 # Dispatch a task
-echo "Refactor X and add tests" | ./ds-cli run -
-./ds-cli run --text "smoke test"
-./ds-cli run --fast --pro - <<'EOF'
+echo "Refactor X and add tests" | handoff run -
+handoff run --text "smoke test"
+handoff run --fast --pro - <<'EOF'
 ...prompt...
 EOF
 
 # Browse/manage past runs
-./ds-cli list             # interactive TUI (curses) when stdout is a terminal
-./ds-cli resume <seq>     # reopen a past conversation interactively in claude
-./ds-cli resume <seq> -   # dispatch a follow-up task to that conversation (heredoc)
-./ds-cli tail <run-id>    # live-tail a run's output stream
+handoff list             # interactive TUI (curses) when stdout is a terminal
+handoff resume <seq>     # reopen a past conversation interactively in claude
+handoff resume <seq> -   # dispatch a follow-up task to that conversation (heredoc)
+handoff tail <run-id>    # live-tail a run's output stream
 
-# Update from git
-./ds-cli update
-
-# Initial setup (creates ~/.ds-cli/config.yaml, symlinks skill/agent files)
-./ds-cli install -y
+# Initial setup (creates ~/.handoff/config.yaml, symlinks skill/agent files)
+handoff init -y
 ```
 
 There are no test suites or linting setup in this repo.

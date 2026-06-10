@@ -1,4 +1,4 @@
-"""Backend resolution and command building for ds-cli.
+"""Backend resolution and command building for handoff.
 
 Given a resolved backend configuration (merged from backend_template + specific
 backend overrides in YAML), this module provides:
@@ -177,7 +177,7 @@ def ensure_backend_token_ready(backend_name: str, backend: dict, user_config_pat
     token = backend.get("env", {}).get("ANTHROPIC_AUTH_TOKEN")
     if isinstance(token, str) and token.startswith("<"):
         print(
-            f"ds-cli: backend '{backend_name}' still uses placeholder token {token}. "
+            f"handoff: backend '{backend_name}' still uses placeholder token {token}. "
             f"Edit {user_config_path} and set a real ANTHROPIC_AUTH_TOKEN.",
             file=sys.stderr,
         )

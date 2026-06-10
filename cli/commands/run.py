@@ -1,4 +1,4 @@
-"""ds-cli run command."""
+"""handoff run command."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from ..config import Config
 
 
 def cmd_run(argv: list[str], config: Config):
-    """ds-cli run [--cwd <dir>] [--fast] [--pro] (<input-file|-> | --text <prompt...>)."""
+    """handoff run [--cwd <dir>] [--fast] [--pro] (<input-file|-> | --text <prompt...>)."""
     fast = False
     pro = False
     cwd = ""
@@ -35,19 +35,19 @@ def cmd_run(argv: list[str], config: Config):
         elif a == "--cwd":
             i += 1
             if i >= len(argv):
-                print("ds-cli run: --cwd requires a value", file=sys.stderr)
+                print("handoff run: --cwd requires a value", file=sys.stderr)
                 sys.exit(2)
             cwd = argv[i]
         elif a == "--backend":
-            print("ds-cli: --backend has been removed; use --fast or edit ~/.ds-cli/config.yaml", file=sys.stderr)
+            print("handoff: --backend has been removed; use --fast or edit ~/.handoff/config.yaml", file=sys.stderr)
             sys.exit(2)
         elif a == "--text":
             text_mode = True
             if input_src:
-                print("ds-cli run: --text cannot be combined with an input file", file=sys.stderr)
+                print("handoff run: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(argv):
-                print("ds-cli run: --text requires a value", file=sys.stderr)
+                print("handoff run: --text requires a value", file=sys.stderr)
                 sys.exit(2)
             if argv[i + 1] == "--":
                 text_parts.extend(argv[i + 2:])
@@ -57,7 +57,7 @@ def cmd_run(argv: list[str], config: Config):
         elif a.startswith("--text="):
             text_mode = True
             if input_src:
-                print("ds-cli run: --text cannot be combined with an input file", file=sys.stderr)
+                print("handoff run: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             text_parts.append(a.split("=", 1)[1])
             text_parts.extend(argv[i + 1:])
@@ -76,11 +76,11 @@ def cmd_run(argv: list[str], config: Config):
                 input_src = argv[i]
             break
         elif a.startswith("-"):
-            print(f"ds-cli run: unknown option {a}", file=sys.stderr)
+            print(f"handoff run: unknown option {a}", file=sys.stderr)
             sys.exit(2)
         else:
             if text_mode:
-                print("ds-cli run: --text cannot be combined with an input file", file=sys.stderr)
+                print("handoff run: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             input_src = a
         i += 1
@@ -88,27 +88,27 @@ def cmd_run(argv: list[str], config: Config):
     if not cwd:
         cwd = os.getcwd()
     if not os.path.isdir(cwd):
-        print(f"ds-cli run: cwd not found: {cwd}", file=sys.stderr)
+        print(f"handoff run: cwd not found: {cwd}", file=sys.stderr)
         sys.exit(2)
 
     if text_mode:
         if not text_parts:
-            print("ds-cli run: --text requires a value", file=sys.stderr)
+            print("handoff run: --text requires a value", file=sys.stderr)
             sys.exit(2)
         prompt_text = " ".join(text_parts)
         if not prompt_text:
-            print("ds-cli run: --text requires a non-empty value", file=sys.stderr)
+            print("handoff run: --text requires a non-empty value", file=sys.stderr)
             sys.exit(2)
     elif input_src == "-" or (not input_src and not sys.stdin.isatty()):
         prompt_text = sys.stdin.read()
     elif input_src:
         if not os.path.isfile(input_src):
-            print(f"ds-cli run: input file not found: {input_src}", file=sys.stderr)
+            print(f"handoff run: input file not found: {input_src}", file=sys.stderr)
             sys.exit(2)
         with open(input_src) as f:
             prompt_text = f.read()
     else:
-        print("ds-cli run: input file required, or use --text <prompt...> / pipe via '-'", file=sys.stderr)
+        print("handoff run: input file required, or use --text <prompt...> / pipe via '-'", file=sys.stderr)
         sys.exit(2)
 
     backend_name = config.fast_backend if fast else config.default_backend
@@ -129,12 +129,12 @@ def _execute(
     When `resume_session_id` is given, the new run is appended to that existing
     claude conversation (`claude -p ... --resume <id>`) rather than starting a
     fresh session; the new row still gets its own run_id/seq/files but shares the
-    session_id. Used by `ds-cli resume <seq> <prompt>`.
+    session_id. Used by `handoff resume <seq> <prompt>`.
     """
     backend_cfg = config.get_backend(backend_name)
     if not backend_cfg:
         print(
-            f"ds-cli: unknown backend '{backend_name}'. "
+            f"handoff: unknown backend '{backend_name}'. "
             f"Available: {', '.join(sorted(config.backends.keys()))}",
             file=sys.stderr,
         )

@@ -161,7 +161,7 @@ def format_event_for_viewer(event: ParsedEvent) -> str | None:
 
 
 def format_event_for_stream(event: ParsedEvent) -> str | None:
-    """Return the single-line text stream shown during `ds-cli run`."""
+    """Return the single-line text stream shown during `handoff run`."""
     if event.kind != "text":
         return None
     text = _collapse_whitespace(event.text)

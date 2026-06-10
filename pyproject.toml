@@ -1,0 +1,24 @@
+[project]
+name = "handoff-cli"
+version = "0.3.0"
+description = "Multi coding-agent task dispatcher — a CLI proxy for claude that sends coding tasks to configurable AI backends"
+requires-python = ">=3.9"
+dependencies = [
+    "PyYAML>=6,<7",
+    "textual>=2,<3",
+]
+
+[project.scripts]
+handoff = "cli.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli"]
+
+# Explicitly include data files that live inside the cli/ package directory.
+# hatchling auto-includes all files under packages, but we list these for clarity.
+# cli/default_config.yaml must be in the wheel.
+# cli/skills/** will be added in stage 3 (placed under cli/skills/).

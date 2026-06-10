@@ -1,7 +1,7 @@
-"""Core shared utilities for ds-cli.
+"""Core shared utilities for handoff.
 
 Includes seq_code arithmetic, database operations, formatting helpers,
-and shared constants.
+automatic migration from the legacy state directory, and shared constants.
 """
 
 from __future__ import annotations
@@ -14,15 +14,54 @@ import datetime
 import re
 from typing import Optional
 
-STATE_DIR = os.path.expanduser("~/.ds-cli")
+STATE_DIR = os.path.expanduser("~/.handoff")
+_DS = "ds"  # legacy prefix, used only for migration
+_LEGACY_DIR = os.path.expanduser(f"~/.{_DS}-cli")
 DB_DIR = os.path.join(STATE_DIR, "runs")
-DB_PATH = os.path.join(DB_DIR, "dscli.db")
+DB_PATH = os.path.join(DB_DIR, "handoff.db")
+_LEGACY_DB = os.path.join(DB_DIR, f"{_DS}cli.db")
 TASKS_DIR = os.path.join(STATE_DIR, "tasks")
 _MAX_DAILY = 1035  # ZZ is max seq_code
 
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
+
+
+# ── migration ──────────────────────────────────────────────────────────────────
+
+
+def _migrate_legacy_state():
+    """If the legacy state dir exists and ~/.handoff does not, rename the entire directory.
+
+    Also migrates the SQLite database file and any WAL/SHM sidecars from
+    the old name to handoff.db inside the renamed directory.
+    """
+    if not os.path.isdir(_LEGACY_DIR):
+        return
+    if os.path.isdir(STATE_DIR):
+        return
+
+    print(f"handoff: detected legacy {_LEGACY_DIR}, migrating to {STATE_DIR} ...", file=sys.stderr)
+    try:
+        os.rename(_LEGACY_DIR, STATE_DIR)
+    except OSError as e:
+        print(f"handoff: migration rename failed: {e}", file=sys.stderr)
+        return
+
+    # Rename main DB file
+    if os.path.isfile(_LEGACY_DB) and not os.path.isfile(DB_PATH):
+        os.rename(_LEGACY_DB, DB_PATH)
+        # Also move WAL/SHM sidecars
+        for suffix in ("-wal", "-shm"):
+            old_sidecar = _LEGACY_DB + suffix
+            if os.path.isfile(old_sidecar):
+                try:
+                    os.rename(old_sidecar, DB_PATH + suffix)
+                except OSError:
+                    pass
+
+    print("handoff: migration complete.", file=sys.stderr)
 
 
 # ── seq_code helpers ──────────────────────────────────────────────────────────
@@ -72,6 +111,7 @@ def seq_code_to_counter(code: str) -> int:
 
 def get_db():
     """Open (or create) the SQLite database, return a connection with row_factory set."""
+    _migrate_legacy_state()
     os.makedirs(DB_DIR, exist_ok=True)
     os.makedirs(TASKS_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -117,8 +157,8 @@ def get_db():
         missing = {"run_id", "seq_code", "run_day", "backend"} - cols
         if missing:
             print(
-                f"ds-cli: schema missing columns {missing}; "
-                f"delete ~/.ds-cli/runs/dscli.db and retry",
+                f"handoff: schema missing columns {missing}; "
+                f"delete ~/.handoff/runs/handoff.db and retry",
                 file=sys.stderr,
             )
             sys.exit(2)
@@ -161,7 +201,7 @@ def create_run(
 
     if n > _MAX_DAILY:
         conn.execute("ROLLBACK")
-        print("ds-cli: exceeded maximum daily run count (ZZ = 1035)", file=sys.stderr)
+        print("handoff: exceeded maximum daily run count (ZZ = 1035)", file=sys.stderr)
         sys.exit(2)
 
     conn.execute(
@@ -170,7 +210,7 @@ def create_run(
     )
 
     seq_code = counter_to_seq_code(n)
-    run_id = f"ds-{mmdd}-{seq_code}"
+    run_id = f"hd-{mmdd}-{seq_code}"
     uid = str(_uuid.uuid4()).lower()
     sess = session_id or uid
     jsonl_path = os.path.join(DB_DIR, f"{run_id}-{uid}.jsonl")

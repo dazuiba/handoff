@@ -1,4 +1,4 @@
-"""ds-cli tail command."""
+"""handoff tail command."""
 
 import sys
 import os
@@ -7,7 +7,7 @@ from ..core import get_db, find_run, short_path, prompt_prefix, task_paths
 
 
 def cmd_tail(argv: list[str], config=None):
-    """ds-cli tail [<run-id|seq>]"""
+    """handoff tail [<run-id|seq>]"""
     selector = ""
     for a in argv:
         if a in ("-h", "--help"):
@@ -15,7 +15,7 @@ def cmd_tail(argv: list[str], config=None):
             usage()
             sys.exit(0)
         elif a.startswith("-"):
-            print(f"ds-cli tail: unknown option {a}", file=sys.stderr)
+            print(f"handoff tail: unknown option {a}", file=sys.stderr)
             sys.exit(2)
         else:
             selector = a
@@ -25,12 +25,12 @@ def cmd_tail(argv: list[str], config=None):
     conn.close()
 
     if not row:
-        print("ds-cli tail: no run found", file=sys.stderr)
+        print("handoff tail: no run found", file=sys.stderr)
         sys.exit(1)
 
     jsonl_path = row["jsonl_path"]
     if not os.path.exists(jsonl_path):
-        print(f"ds-cli tail: jsonl not found: {jsonl_path}", file=sys.stderr)
+        print(f"handoff tail: jsonl not found: {jsonl_path}", file=sys.stderr)
         sys.exit(1)
 
     run_id = row["run_id"]

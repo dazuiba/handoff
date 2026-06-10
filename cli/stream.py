@@ -1,4 +1,4 @@
-"""Stream processing helpers for ds-cli."""
+"""Stream processing helpers for handoff."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def execute_run(
         with open(result_path, "w") as rf:
             rf.write("INTERRUPTED\n")
         emit_result_marker()
-        print("\nds-cli run: interrupted", file=sys.stderr)
+        print("\nhandoff run: interrupted", file=sys.stderr)
         conn.close()
         sys.exit(130)
 
@@ -139,7 +139,7 @@ def execute_run(
         finish_success(result)
 
     update_status("error")
-    diag = f"ds-cli run: no successful result found; exit status {proc.returncode}\nJSONL={jsonl_path}\n"
+    diag = f"handoff run: no successful result found; exit status {proc.returncode}\nJSONL={jsonl_path}\n"
     print(diag.rstrip(), file=sys.stderr)
     print(f"JSONL={jsonl_path}", file=sys.stderr)
     with open(result_path, "w") as rf:

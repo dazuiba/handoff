@@ -1,11 +1,11 @@
-"""ds-cli resume command.
+"""handoff resume command.
 
 Unifies "reopen a past conversation" into one verb, keyed by seq (or run-id):
 
-  ds-cli resume <seq>                  — interactive: drop into `claude --resume`
-  ds-cli resume <seq> - <<'EOF' ...    — non-interactive: dispatch a new task to
-  ds-cli resume <seq> --text "..."       that same conversation (claude -p --resume),
-                                         running through the normal run pipeline.
+  handoff resume <seq>                  — interactive: drop into `claude --resume`
+  handoff resume <seq> - <<'EOF' ...    — non-interactive: dispatch a new task to
+  handoff resume <seq> --text "..."       that same conversation (claude -p --resume),
+                                          running through the normal run pipeline.
 
 The seq → session mapping comes from the runs table: the selected row's
 `session_id` is the underlying claude conversation. `--resume` does not fork, so
@@ -22,7 +22,7 @@ from ..config import Config
 
 
 def cmd_resume(argv: list[str], config: Config):
-    """ds-cli resume [<run-id|seq>] [--fast] [--pro] [--cwd <dir>]
+    """handoff resume [<run-id|seq>] [--fast] [--pro] [--cwd <dir>]
     [(<input-file|-> | --text <prompt...>)]."""
     fast = False
     pro = False
@@ -41,19 +41,19 @@ def cmd_resume(argv: list[str], config: Config):
         elif a == "--cwd":
             i += 1
             if i >= len(argv):
-                print("ds-cli resume: --cwd requires a value", file=sys.stderr)
+                print("handoff resume: --cwd requires a value", file=sys.stderr)
                 sys.exit(2)
             cwd = argv[i]
         elif a == "--backend":
-            print("ds-cli: --backend has been removed; use --fast or edit ~/.ds-cli/config.yaml", file=sys.stderr)
+            print("handoff: --backend has been removed; use --fast or edit ~/.handoff/config.yaml", file=sys.stderr)
             sys.exit(2)
         elif a == "--text":
             text_mode = True
             if input_src:
-                print("ds-cli resume: --text cannot be combined with an input file", file=sys.stderr)
+                print("handoff resume: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(argv):
-                print("ds-cli resume: --text requires a value", file=sys.stderr)
+                print("handoff resume: --text requires a value", file=sys.stderr)
                 sys.exit(2)
             if argv[i + 1] == "--":
                 text_parts.extend(argv[i + 2:])
@@ -63,7 +63,7 @@ def cmd_resume(argv: list[str], config: Config):
         elif a.startswith("--text="):
             text_mode = True
             if input_src:
-                print("ds-cli resume: --text cannot be combined with an input file", file=sys.stderr)
+                print("handoff resume: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             text_parts.append(a.split("=", 1)[1])
             text_parts.extend(argv[i + 1:])
@@ -77,7 +77,7 @@ def cmd_resume(argv: list[str], config: Config):
             usage()
             sys.exit(0)
         elif a.startswith("-") and a != "-":
-            print(f"ds-cli resume: unknown option {a}", file=sys.stderr)
+            print(f"handoff resume: unknown option {a}", file=sys.stderr)
             sys.exit(2)
         else:
             # First bare positional is the selector (seq/run-id); a second one is
@@ -86,7 +86,7 @@ def cmd_resume(argv: list[str], config: Config):
                 selector = a
                 have_selector = True
             elif text_mode:
-                print("ds-cli resume: --text cannot be combined with an input file", file=sys.stderr)
+                print("handoff resume: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             else:
                 input_src = a
@@ -98,7 +98,7 @@ def cmd_resume(argv: list[str], config: Config):
 
     if not row:
         conn.close()
-        print("ds-cli resume: no run found", file=sys.stderr)
+        print("handoff resume: no run found", file=sys.stderr)
         sys.exit(1)
 
     session_id = row_value(row, "session_id", "") or row["uuid"]
@@ -110,13 +110,13 @@ def cmd_resume(argv: list[str], config: Config):
     if text_mode:
         prompt_text = " ".join(text_parts)
         if not prompt_text:
-            print("ds-cli resume: --text requires a non-empty value", file=sys.stderr)
+            print("handoff resume: --text requires a non-empty value", file=sys.stderr)
             sys.exit(2)
     elif input_src == "-" or (not input_src and not sys.stdin.isatty()):
         prompt_text = sys.stdin.read()
     elif input_src:
         if not os.path.isfile(input_src):
-            print(f"ds-cli resume: input file not found: {input_src}", file=sys.stderr)
+            print(f"handoff resume: input file not found: {input_src}", file=sys.stderr)
             sys.exit(2)
         with open(input_src) as f:
             prompt_text = f.read()
@@ -124,7 +124,7 @@ def cmd_resume(argv: list[str], config: Config):
     if not cwd:
         cwd = row_cwd
     if not os.path.isdir(cwd):
-        print(f"ds-cli resume: cwd not found: {cwd}", file=sys.stderr)
+        print(f"handoff resume: cwd not found: {cwd}", file=sys.stderr)
         sys.exit(2)
 
     # Backend: --fast wins; otherwise the conversation's saved backend, else default.
@@ -148,7 +148,7 @@ def _resume_interactive(config: Config, backend_name: str, session_id: str, cwd:
     backend_cfg = config.get_backend(backend_name)
     if not backend_cfg:
         print(
-            f"ds-cli: unknown backend '{backend_name}'. "
+            f"handoff: unknown backend '{backend_name}'. "
             f"Available: {', '.join(sorted(config.backends.keys()))}",
             file=sys.stderr,
         )

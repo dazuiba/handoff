@@ -1,15 +1,15 @@
-"""YAML configuration loading and merging for ds-cli.
+"""YAML configuration loading and merging for handoff.
 
 Configuration flow:
-  1. If ~/.ds-cli/config.yaml is missing, run the interactive installer
-  2. Load ~/.ds-cli/config.yaml as the single source of truth
+  1. If ~/.handoff/config.yaml is missing, run the interactive installer
+  2. Load ~/.handoff/config.yaml as the single source of truth
   3. If the user config includes the bundled default_config.yaml (via `include:`),
      the defaults are deep-merged first, then the user config overrides them.
 
 Backend resolution:
   - Resolved backend = backend_template + specific backend overrides
   - Template fields are defaults; backends can override any field
-  - Backend instances only come from ~/.ds-cli/config.yaml
+  - Backend instances only come from ~/.handoff/config.yaml
 """
 
 from __future__ import annotations
@@ -23,18 +23,18 @@ try:
     import yaml
 except ImportError:
     print(
-        "ds-cli: PyYAML is required. Install it with: pip install pyyaml",
+        "handoff: PyYAML is required. Install it with: pip install pyyaml",
         file=sys.stderr,
     )
     sys.exit(1)
 
 _DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "default_config.yaml")
-_DEFAULT_USER_CONFIG = """# ds-cli user configuration — overrides only.
+_DEFAULT_USER_CONFIG = """# handoff user configuration — overrides only.
 #
 # Bundled defaults (models, backend_template, system_prompt) are layered
 # underneath this file automatically; you never need to point at the source
 # tree. To see everything you can override, read cli/default_config.yaml in
-# the ds-cli repo. Use `include:` only for your own extra config files.
+# the handoff repo. Use `include:` only for your own extra config files.
 
 default_backend: default
 fast_backend: default
@@ -54,7 +54,7 @@ backends:
 
 
 def user_config_dir() -> str:
-    return os.path.join(os.path.expanduser("~"), ".ds-cli")
+    return os.path.join(os.path.expanduser("~"), ".handoff")
 
 
 def user_config_path() -> str:
@@ -69,11 +69,11 @@ def _load_yaml(path: str) -> dict:
         with open(path, "r") as f:
             data = yaml.safe_load(f) or {}
         if not isinstance(data, dict):
-            print(f"ds-cli: config {path} must be a mapping", file=sys.stderr)
+            print(f"handoff: config {path} must be a mapping", file=sys.stderr)
             sys.exit(1)
         return data
     except yaml.YAMLError as e:
-        print(f"ds-cli: error parsing {path}: {e}", file=sys.stderr)
+        print(f"handoff: error parsing {path}: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -90,7 +90,7 @@ def write_default_user_config() -> bool:
             f.write(content)
         return True
     except OSError as e:
-        print(f"ds-cli: failed to create default user config at {path}: {e}", file=sys.stderr)
+        print(f"handoff: failed to create default user config at {path}: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -98,11 +98,11 @@ def _ensure_user_config_exists():
     if os.path.isfile(user_config_path()):
         return
 
-    from .commands.install import run_install
+    from .commands.init import run_init
 
-    run_install()
+    run_init()
     if not os.path.isfile(user_config_path()):
-        print(f"ds-cli: initialization did not create {user_config_path()}", file=sys.stderr)
+        print(f"handoff: initialization did not create {user_config_path()}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -184,7 +184,7 @@ def _load_with_includes(path: str, _seen: Optional[set] = None) -> dict:
 
 
 class Config:
-    """Resolved ds-cli configuration."""
+    """Resolved handoff configuration."""
 
     def __init__(self):
         _ensure_user_config_exists()
@@ -233,13 +233,13 @@ class Config:
         """Return the resolved backends dict (merged with template)."""
         raw = self._merged.get("backends", {})
         if not isinstance(raw, dict):
-            print("ds-cli: config key 'backends' must be a mapping", file=sys.stderr)
+            print("handoff: config key 'backends' must be a mapping", file=sys.stderr)
             sys.exit(1)
         result = {}
         template = self.backend_template
         for name, overrides in raw.items():
             if not isinstance(overrides, dict):
-                print(f"ds-cli: backend '{name}' must be a mapping", file=sys.stderr)
+                print(f"handoff: backend '{name}' must be a mapping", file=sys.stderr)
                 sys.exit(1)
             merged = _deep_merge(template, overrides)
             result[name] = merged
@@ -261,20 +261,20 @@ class Config:
     def _required(self, key: str):
         val = self._merged.get(key)
         if val in (None, ""):
-            print(f"ds-cli: missing required config key: {key}", file=sys.stderr)
+            print(f"handoff: missing required config key: {key}", file=sys.stderr)
             sys.exit(1)
         return val
 
     def _validate(self):
         template = self._merged.get("backend_template", {})
         if not isinstance(template, dict) or not template:
-            print("ds-cli: missing required config mapping: backend_template", file=sys.stderr)
+            print("handoff: missing required config mapping: backend_template", file=sys.stderr)
             sys.exit(1)
 
         backends = self._merged.get("backends", {})
         if not isinstance(backends, dict) or not backends:
             print(
-                "ds-cli: ~/.ds-cli/config.yaml must define at least one backend under 'backends'",
+                "handoff: ~/.handoff/config.yaml must define at least one backend under 'backends'",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -283,7 +283,7 @@ class Config:
             backend_name = self._required(key)
             if backend_name not in backends:
                 print(
-                    f"ds-cli: config key '{key}' points to unknown backend '{backend_name}'",
+                    f"handoff: config key '{key}' points to unknown backend '{backend_name}'",
                     file=sys.stderr,
                 )
                 sys.exit(1)

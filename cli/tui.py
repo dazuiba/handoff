@@ -1,4 +1,4 @@
-"""Textual-based TUI for interactive run listing and detail viewing in ds-cli."""
+"""Textual-based TUI for interactive run listing and detail viewing in handoff."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class RunListScreen(Screen):
     def compose(self) -> ComposeResult:
         count = len(self._rows)
         run_label = "run" if count == 1 else "runs"
-        yield Static(f" ds-cli runs  ·  {count} recent {run_label}", id="title_bar")
+        yield Static(f" handoff runs  ·  {count} recent {run_label}", id="title_bar")
         yield DataTable(id="run_table", cursor_type="row")
         yield Footer()
 
@@ -209,7 +209,7 @@ class RunListScreen(Screen):
 
         if not self._rows:
             table.add_row("(no runs)", "", "", "", "")
-            self.query_one("#title_bar", Static).update(" ds-cli runs  ·  0 runs")
+            self.query_one("#title_bar", Static).update(" handoff runs  ·  0 runs")
             return
 
         for row in self._rows:
@@ -227,7 +227,7 @@ class RunListScreen(Screen):
         count = len(self._rows)
         run_label = "run" if count == 1 else "runs"
         self.query_one("#title_bar", Static).update(
-            f" ds-cli runs  ·  {count} recent {run_label}"
+            f" handoff runs  ·  {count} recent {run_label}"
         )
 
         self._restore_cursor()
@@ -284,7 +284,7 @@ class RunListApp(App):
             ...
     """
 
-    TITLE = "ds-cli list"
+    TITLE = "handoff list"
     CSS = """
     #title_bar {
         dock: top;

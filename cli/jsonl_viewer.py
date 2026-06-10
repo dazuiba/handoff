@@ -1,11 +1,11 @@
-"""Shared JSONL viewer for ds-cli list (detail) and tail commands.
+"""Shared JSONL viewer for handoff list (detail) and tail commands.
 
 Uses Textual to render Claude stream-json output: compact progress log,
 input prompt (markdown), and final result (markdown). No external cclean dependency.
 
 Modes:
   - static:  list detail page; Escape dismisses back to list
-  - follow:  `ds-cli tail`; Escape / Q exit the app
+  - follow:  `handoff tail`; Escape / Q exit the app
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from .jsonl_parser import ParsedEvent, format_event_for_viewer, read_events
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class JsonlViewerScreen(Screen):
-    """Shared JSONL viewer screen for ds-cli list (detail) and tail.
+    """Shared JSONL viewer screen for handoff list (detail) and tail.
 
     Layout:
       - RunInfoBar (top bar)
@@ -386,9 +386,9 @@ class JsonlViewerScreen(Screen):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class JsonlTailApp(App):
-    """Standalone Textual app for `ds-cli tail`."""
+    """Standalone Textual app for `handoff tail`."""
 
-    TITLE = "ds-cli tail"
+    TITLE = "handoff tail"
 
     def __init__(
         self,
@@ -417,7 +417,7 @@ class JsonlTailApp(App):
 
 
 def run_tail(jsonl_path: str, prompt_path: str, result_path: str, run_info: dict) -> None:
-    """Entry point for `ds-cli tail`."""
+    """Entry point for `handoff tail`."""
     out_path = run_info.get("out_path", "")
     JsonlTailApp(jsonl_path, prompt_path, out_path, result_path, run_info).run(mouse=False)
 
