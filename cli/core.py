@@ -15,11 +15,10 @@ import re
 from typing import Optional
 
 STATE_DIR = os.path.expanduser("~/.handoff")
-_DS = "ds"  # legacy prefix, used only for migration
-_LEGACY_DIR = os.path.expanduser(f"~/.{_DS}-cli")
+_LEGACY_DIR = os.path.expanduser("~/.ds-cli")  # pre-rename state dir, used only for migration
 DB_DIR = os.path.join(STATE_DIR, "runs")
 DB_PATH = os.path.join(DB_DIR, "handoff.db")
-_LEGACY_DB = os.path.join(DB_DIR, f"{_DS}cli.db")
+_LEGACY_DB = os.path.join(DB_DIR, "dscli.db")  # pre-rename DB name, used only for migration
 TASKS_DIR = os.path.join(STATE_DIR, "tasks")
 _MAX_DAILY = 1035  # ZZ is max seq_code
 
