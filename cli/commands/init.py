@@ -111,7 +111,7 @@ def run_init(assume_yes: bool = False):
 
     print("")
     print("Next:")
-    print(f"  1. Set DEEPSEEK_API_KEY in your shell, or edit {user_config_path()} and replace <YOUR_DEEPSEEK_TOKEN>.")
+    print(f"  1. Set DEEPSEEK_API_KEY in your shell, or edit {user_config_path()} and replace ${{DEEPSEEK_API_KEY}} with your token.")
     print(f"  2. Read {readme} for Codex and Claude Code usage.")
 
 

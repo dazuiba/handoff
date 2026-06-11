@@ -147,17 +147,30 @@ Let the flagship model communicate, decompose, and review; hand all execution of
 
 ## Configuration
 
-Three targets are built in and work out of the box; the minimal config is just a DeepSeek token:
+`handoff init` writes a complete `~/.handoff/config.yaml` — three backends, ready to go. The first one is the default. Only DeepSeek needs a token; opus and codex reuse your local logins with zero config.
 
 ```yaml
-# ~/.handoff/config.yaml — or set DEEPSEEK_API_KEY and leave this file empty
+# ~/.handoff/config.yaml — handoff init generates this for you
 backends:
-  deepseek:
+  deepseek:                          # ← first = default
+    type: claude
+    model: deepseek-v4-flash
+    pro_model: "deepseek-v4-pro[1m]"
     env:
-      ANTHROPIC_AUTH_TOKEN: "sk-..."
+      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+      ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"   # set in shell, or replace with sk-...
+      ANTHROPIC_MODEL: "{model}"
+
+  opus:                              # local claude login — zero config
+    type: claude
+    ...
+
+  codex:                             # local codex login — zero config
+    type: codex
+    ...
 ```
 
-Want another Anthropic-compatible endpoint? Add a custom target:
+Want another Anthropic-compatible endpoint? Add a block under `backends`:
 
 ```yaml
 backends:
@@ -167,12 +180,15 @@ backends:
     env:
       ANTHROPIC_BASE_URL: https://api.moonshot.cn/anthropic
       ANTHROPIC_AUTH_TOKEN: "${MOONSHOT_API_KEY}"
+      ANTHROPIC_MODEL: "{model}"
 ```
 
-Merge semantics and every overridable field: **[configuration docs →](docs/configuration.zh-CN.md)**.
+The env block is entirely yours — every key=value you set is exported before the CLI launches. `{model}` substitutes the resolved model name, `${ENV_VAR}` expands from your shell.
+
+Run `handoff env` to see where everything lives. Full details: **[configuration docs →](docs/configuration.zh-CN.md)**.
 
 ## More
 
-- **[CLI reference →](docs/cli-reference.zh-CN.md)** — full usage of `run` / `resume` / `list` / `tail` / `init`, run-id encoding, on-disk file layout.
-- **[Configuration →](docs/configuration.zh-CN.md)** — type_defaults merging, custom targets, `${ENV}` interpolation.
+- **[CLI reference →](docs/cli-reference.zh-CN.md)** — full usage of `run` / `resume` / `list` / `tail` / `env` / `init`, run-id encoding, on-disk file layout.
+- **[Configuration →](docs/configuration.zh-CN.md)** — mechanism vs data layers, env block, `${ENV}` interpolation, include, custom backends.
 - **[Design notes →](docs/design.zh-CN.md)** — why Claude Code uses background shells while Codex uses a subagent; the RESULT= protocol.

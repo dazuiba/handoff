@@ -20,5 +20,5 @@ packages = ["cli"]
 
 # Explicitly include data files that live inside the cli/ package directory.
 # hatchling auto-includes all files under packages, but we list these for clarity.
-# cli/default_config.yaml must be in the wheel.
+# cli/backend_types.yaml and cli/user_config_template.yaml must be in the wheel.
 # cli/skills/ contains 3 SKILL.md files + 1 Codex agent toml, auto-included by hatchling.

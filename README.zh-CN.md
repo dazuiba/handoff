@@ -147,17 +147,30 @@ handoff init
 
 ## 配置
 
-内置三个目标开箱即用，最小配置只需 DeepSeek token：
+`handoff init` 生成一份完整的 `~/.handoff/config.yaml`——三个后端，开箱即用。第一个是默认目标。只有 DeepSeek 需要填 token；opus 和 codex 走本机登录态，零配置。
 
 ```yaml
-# ~/.handoff/config.yaml —— 也可以用环境变量 DEEPSEEK_API_KEY 代替，文件留空
+# ~/.handoff/config.yaml —— handoff init 帮你生成
 backends:
-  deepseek:
+  deepseek:                          # ← 第一个 = 默认
+    type: claude
+    model: deepseek-v4-flash
+    pro_model: "deepseek-v4-pro[1m]"
     env:
-      ANTHROPIC_AUTH_TOKEN: "sk-..."
+      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+      ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"   # 设环境变量，或直接写 sk-...
+      ANTHROPIC_MODEL: "{model}"
+
+  opus:                              # 本机 claude 登录态，零配置
+    type: claude
+    ...
+
+  codex:                             # 本机 codex 登录态，零配置
+    type: codex
+    ...
 ```
 
-想接入其他 anthropic 兼容端点？加一段自定义目标即可：
+想接入其他 anthropic 兼容端点？在 `backends` 下加一段即可：
 
 ```yaml
 backends:
@@ -167,12 +180,15 @@ backends:
     env:
       ANTHROPIC_BASE_URL: https://api.moonshot.cn/anthropic
       ANTHROPIC_AUTH_TOKEN: "${MOONSHOT_API_KEY}"
+      ANTHROPIC_MODEL: "{model}"
 ```
 
-合并机制、全部可覆盖字段见 **[配置文档 →](docs/configuration.zh-CN.md)**。
+env 块全由你书写——你设的每个 key=value 都会在拉起 CLI 前导出为环境变量。`{model}` 替换为解析出的模型名，`${ENV_VAR}` 从当前 shell 展开。
+
+运行 `handoff env` 看一下各路径在哪。完整细节见 **[配置文档 →](docs/configuration.zh-CN.md)**。
 
 ## 更多
 
-- **[命令参考 →](docs/cli-reference.zh-CN.md)** — `run` / `resume` / `list` / `tail` / `init` 全部用法，run id 编码与落盘文件布局。
-- **[配置文档 →](docs/configuration.zh-CN.md)** — type_defaults 合并机制、自定义目标、`${ENV}` 插值。
+- **[命令参考 →](docs/cli-reference.zh-CN.md)** — `run` / `resume` / `list` / `tail` / `env` / `init` 全部用法，run id 编码与落盘文件布局。
+- **[配置文档 →](docs/configuration.zh-CN.md)** — 机制与数据两层、env 块、`${ENV}` 插值、include、自定义后端。
 - **[设计说明 →](docs/design.zh-CN.md)** — 为什么 Claude Code 用后台 shell、Codex 用 subagent；RESULT= 协议细节。

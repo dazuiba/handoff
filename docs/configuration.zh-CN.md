@@ -2,23 +2,29 @@
 
 [← 返回 README](../README.zh-CN.md)
 
-handoff 开箱即用——三个内置后端（deepseek / opus / codex）自带完整的启动契约，`~/.handoff/config.yaml` 只需写你要覆盖的部分。
+handoff 的配置分两层：**机制**（程序承诺，不可覆盖）和**数据**（用户资产，所见即所得）。
 
-## 配置层级
+## 两层模型
 
 ```
-cli/default_config.yaml（内置默认值，含 type_defaults + 三个 backend）
-        ↓  deep-merge（列表替换，字符串值支持 ${ENV_VAR} 插值）
-~/.handoff/config.yaml（用户覆盖）
+cli/backend_types.yaml（机制：每种 type 怎么被拉起——flags、PTY）
+        ↓  不可覆盖；同名键在用户 config 中出现会被警告并忽略
+        ↓
+~/.handoff/config.yaml（数据：backends 定义。handoff init 生成完整文件，
+                        没有隐藏的合并层——你看到的就是实际运行的）
 ```
 
-用户配置文件支持 `include:` 指令（字符串或列表），被 include 的文件先合并，再被当前文件的键覆盖。有循环检测。
+机制层随包分发（`cli/backend_types.yaml`），定义了 `claude` / `codex` 两种 type 的 CLI 命令、PTY 包装和 flag 模板。这些是程序行为的一部分，用户不能覆盖——改了也没用。
+
+数据层就是你的 `~/.handoff/config.yaml`。`handoff init` 会生成一份含三个后端（deepseek / opus / codex）的完整配置；你只需填 deepseek 的 token。没有隐藏的默认值覆盖你的设置——文件里写的就是全部。
+
+运行 `handoff env` 可以随时找到这两个文件的路径。
 
 ## 最小配置
 
 opus / codex 走你本机的登录态，零配置。deepseek 只需一个 token——二选一：
 
-**方式一：环境变量**（推荐，文件可留空）
+**方式一：环境变量**（推荐）
 
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
@@ -34,8 +40,6 @@ backends:
       ANTHROPIC_AUTH_TOKEN: "sk-..."
 ```
 
-内置的 deepseek backend 已声明 `ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"`——`${}` 语法会在加载时展开为环境变量的值，不设置就是空字符串。
-
 ## 三个内置后端
 
 | backend | type | 模型 | 底层 | 需要配置 |
@@ -44,22 +48,18 @@ backends:
 | `opus` | claude | `claude-opus-4-8` | `claude -p` → 本机 Claude 登录态 | 无 |
 | `codex` | codex | `gpt-5.5` | `codex exec` → 本机 Codex 登录态 | 无 |
 
-默认后端是 `deepseek`（由 `default_backend` 键指定）。
+默认后端是 `backends` 下的**第一个条目**。
 
-## type_defaults 合并机制
+## 后端解析
 
-每个 backend 有一个 `type`（`claude` 或 `codex`）。解析时：
+每个 backend 在运行时经历两步：
 
-```
-type_defaults[<type>]  →  backends.<name>  →  用户配置
-```
+1. **机制合并**：`backend_types.yaml` 里该 `type` 的字段（command、pty、session_flags 等）作为基底
+2. **用户数据覆盖**：你的 backend 字段（model、pro_model、env 等）深合并上去
 
-三层 deep-merge。**映射递归合并，列表整体替换**（不会拼接）。字符串值里的 `${ENV_VAR}` 在合并后统一展开。
+合并语义：**映射递归合并，列表整体替换**（不会拼接）。`env` 是你全权书写的——机制层不带任何 `env` 映射，所有环境变量都由你设置。
 
-这意味着：
-- 所有 `type: claude` 的 backend 自动继承 PTY 包装、stream-json 格式、session flag 模板
-- 所有 `type: codex` 的 backend 自动继承 `codex exec --json` 的 flag 模板
-- 每个 backend 只需声明自己的 endpoint / token / model
+字符串值里的 `${ENV_VAR}` 在合并后统一展开。未设置的环境变量展开为空字符串。
 
 ## 自定义 backend
 
@@ -73,24 +73,30 @@ backends:
     env:
       ANTHROPIC_BASE_URL: https://api.moonshot.cn/anthropic
       ANTHROPIC_AUTH_TOKEN: "${MOONSHOT_API_KEY}"
+      ANTHROPIC_MODEL: "{model}"
 ```
 
-`type: claude` 的 backend 必须带有 `model` 字段（否则启动时报错），除非有旧版顶层 `default_model` 作 fallback。
+`type: claude` 的 backend 必须带有 `model` 字段（否则启动时报错）。`env` 块里的 `{model}` 占位符会在运行时替换为该 backend 解析出的模型名（`--pro` 时取 `pro_model`）。
 
 ### 本地 OpenCode proxy
 
 ```yaml
-default_backend: opencode
-
 backends:
   opencode:
     type: claude
     model: deepseek-v4-flash
-    pro_model: deepseek-v4-pro[1m]
+    pro_model: "deepseek-v4-pro[1m]"
     env:
       ANTHROPIC_BASE_URL: http://127.0.0.1:4000
       ANTHROPIC_AUTH_TOKEN: unused
+      ANTHROPIC_MODEL: "{model}"
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "{pro_model}"
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "{model}"
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "{model}"
+      CLAUDE_CODE_SUBAGENT_MODEL: "{model}"
 ```
+
+OpenCode 的本地 proxy 需要完整的 Anthropic 模型映射。你可以在 `env` 块里自由设置任意变量——没有限制。
 
 ## include 机制
 
@@ -105,35 +111,35 @@ backends:
 
 `include` 可以是字符串（单文件）或列表（多文件，按顺序合并）。路径解析：先相对于**当前文件所在目录**，再 fallback 到包目录。有循环检测（按 realpath 去重）。
 
+## system_prompt 覆盖
+
+`backend_types.yaml` 内置了一段 system_prompt（让模型直接执行、不反问）。你可以用自己的文本覆盖它：
+
+```yaml
+# ~/.handoff/config.yaml
+system_prompt: |
+  你是一个精于代码实现的助手。收到任务后直接开始写代码，不要...
+```
+
+这是唯一可以覆盖的内置值。其他机制层字段（`type_defaults`、flag 模板等）无法在用户 config 中覆盖——即使写了也会被警告并忽略。
+
 ## 可覆盖字段全表
 
-`type_defaults.<type>` 下可覆盖的字段（影响该类型所有 backend 的启动方式）：
-
-| 字段 | 说明 |
-| --- | --- |
-| `command` | CLI 命令名（默认 `claude` / `codex`） |
-| `pty` | PTY 包装命令列表（claude 型默认 `["script", "-q", "/dev/null"]`；codex 型为 `[]`） |
-| `env` | 环境变量映射（支持 `{model}`、`{pro_model}`、`{home}` 占位符） |
-| `session_flags` | 新会话的 flag 模板（支持 `{prompt}`、`{model}`、`{cwd}` 等） |
-| `session_id_flags` | 指定会话 ID 的 flag 模板（`{session_id}`） |
-| `continue_id_flags` | 非交互续接的 flag 模板 |
-| `resume_flags` | 交互重开的 flag 模板 |
-
-`backends.<name>` 下可覆盖的字段：
+`backends.<name>` 下可写的字段：
 
 | 字段 | 说明 |
 | --- | --- |
 | `type` | `claude` 或 `codex` |
-| `description` | 显示用描述 |
-| `model` | 默认模型名 |
+| `description` | 显示用描述（可选） |
+| `model` | 默认模型名（claude 型必填） |
 | `pro_model` | `--pro` 时使用的模型名 |
-| `env` | 该 backend 专属的环境变量（与 type_defaults 的 env 合并） |
+| `env` | 该 backend 专属的环境变量。支持 `{model}`、`{pro_model}`、`{home}` 占位符，以及 `${ENV_VAR}` shell 展开 |
 
-顶层可覆盖字段：
+顶层可写字段：
 
 | 字段 | 说明 |
 | --- | --- |
-| `default_backend` | 默认使用的 backend 名称 |
-| `system_prompt` | 追加给 claude 型 backend 的系统提示词 |
+| `system_prompt` | 覆盖内置 system_prompt |
+| `include` | 引用其他 YAML 文件 |
 
-完整默认值见仓库内的 `cli/default_config.yaml`。
+机制层（`cli/backend_types.yaml`）定义了 claude/codex 两种 type 的 `command`、`pty`、`session_flags`、`session_id_flags`、`continue_id_flags`、`resume_flags`。这些是程序行为，不可覆盖——想了解完整启动逻辑请直接读那个文件。

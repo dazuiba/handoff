@@ -90,4 +90,4 @@ codex 使用自己的登录态（`~/.codex/auth.json` 或 `OPENAI_API_KEY`）—
 
 ### 流解析器
 
-`CodexStreamParser`（`cli/stream.py`）实现了上述事件映射。codex 路径的详细部署配置见 `cli/default_config.yaml` → `type_defaults.codex`。
+`CodexStreamParser`（`cli/stream.py`）实现了上述事件映射。codex 路径的详细启动配置见 `cli/backend_types.yaml` → `types.codex`。

@@ -2,7 +2,7 @@
 
 [← 返回 README](../README.zh-CN.md)
 
-你通常通过 skill（Claude Code）或 subagent（Codex）调用 handoff，但底层就是一个普通 CLI。本文档覆盖全部五个命令及所有标志。
+你通常通过 skill（Claude Code）或 subagent（Codex）调用 handoff，但底层就是一个普通 CLI。本文档覆盖全部六个命令及所有标志。
 
 ## run — 派发新任务
 
@@ -24,7 +24,7 @@ handoff run [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <p
 
 | 标志 | 作用 |
 | --- | --- |
-| `--backend <name>` | 选择后端（内置：`deepseek`、`opus`、`codex`）。省略时使用 `default_backend` |
+| `--backend <name>` | 选择后端（内置：`deepseek`、`opus`、`codex`）。省略时使用 `backends` 下第一个条目 |
 | `--cwd <dir>` | 指定工作目录，默认继承当前进程的 cwd |
 | `--pro` | 使用当前后端配置的 `pro_model` 而非默认 `model` |
 
@@ -82,6 +82,23 @@ handoff tail [<run-id|seq>]
 ```
 
 实时跟踪某条 run 的输出流（类似 `tail -f`）。省略参数则跟踪最近一次 run。适合诊断或围观后台任务执行过程。
+
+## env — 查看配置路径
+
+```bash
+handoff env
+```
+
+输出 4 行 `key=绝对路径`，供人和脚本使用：
+
+```text
+config=/Users/sam/.handoff/config.yaml
+backend_types=<安装包内 backend_types.yaml 的实际绝对路径>
+tasks=/Users/sam/.handoff/tasks
+runs=/Users/sam/.handoff/runs
+```
+
+不初始化 Config——路径信息不应因 config 损坏而不可得。
 
 ## init — 初始化配置
 

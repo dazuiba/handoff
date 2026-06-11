@@ -10,12 +10,14 @@ def usage(config=None):
     print(
         """usage:
   handoff --help
+  handoff env
   handoff init      [-y|--yes]
   handoff list      [--uuid] [--cwd]
   handoff run       [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <prompt...>)
   handoff resume    [<run-id|seq>] [--pro] [--cwd <dir>] [(<input-file|-> | --text <prompt...>)]
   handoff tail [<run-id|seq>]
 
+  handoff env              — print config / data paths (works even with broken config)
   handoff list             — browse and inspect your past sessions
   handoff run --text hi    — quick smoke-test / debug your config.yaml
   handoff resume <seq>     — reopen a past conversation (interactive)
@@ -24,7 +26,7 @@ def usage(config=None):
 
 Run ids: hd-<MMDD>-<SEQ_CODE>  (seq_code: daily counter, 01..99, A0..ZZ)
 --cwd defaults to the current directory of the calling process.
---backend picks a backend (bundled: deepseek, opus, codex; default: default_backend).
+--backend picks a backend (default: first entry in config.yaml backends).
 --pro uses the backend's pro_model. A resume stays on its original backend."""
     )
 
@@ -62,11 +64,17 @@ def main():
         cmd_init(rest)
         return
 
+    if subcmd == "env":
+        from .commands.env import cmd_env
+
+        cmd_env(rest)
+        return
+
     known = {"run", "list", "resume", "tail"}
     if subcmd not in known:
         print(
             f"handoff: unknown subcommand '{subcmd}' — expected: "
-            f"init, list, run, resume, tail",
+            f"env, init, list, run, resume, tail",
             file=sys.stderr,
         )
         usage()

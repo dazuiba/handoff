@@ -1,0 +1,31 @@
+# handoff 配置 — 这是唯一需要你编辑的配置文件。
+# 改坏了可从模板恢复：
+#   https://github.com/dazuiba/handoff/blob/main/cli/user_config_template.yaml
+# claude/codex 的拉起方式（flags、PTY）是程序承诺，不在本文件配置；
+# 运行 `handoff env` 可拿到 backend_types.yaml 的路径，了解完整配置逻辑。
+#
+# backends 里第一个条目就是默认目标（handoff run 不带 --backend 时用它）。
+# env 由你全权书写：{model} 会替换为该 backend 解析出的模型（--pro 时取 pro_model），
+# "${VAR}" 会展开同名环境变量。
+
+backends:
+  deepseek:
+    type: claude
+    model: deepseek-v4-flash
+    pro_model: "deepseek-v4-pro[1m]"
+    env:
+      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+      ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"   # 或直接写 sk-...
+      ANTHROPIC_MODEL: "{model}"
+
+  opus:               # 走本机 claude 登录态，零配置
+    type: claude
+    model: claude-opus-4-8
+    pro_model: claude-opus-4-8
+    env:
+      ANTHROPIC_MODEL: "{model}"
+
+  codex:              # 走本机 codex 登录态，零配置；模型经 -m 传入
+    type: codex
+    model: gpt-5.5
+    pro_model: gpt-5.5
