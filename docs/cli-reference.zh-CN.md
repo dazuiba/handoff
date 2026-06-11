@@ -6,15 +6,16 @@
 
 | 使用者 | 命令 | 用途 |
 | --- | --- | --- |
-| **你** | `list` / `tail` / `env` / `init` | 看任务列表、盯进度、查路径、初始化 |
+| **你** | `list`/`ls` / `tail` / `env` / `init` | 看任务列表、盯进度、查路径、初始化 |
 | **AI**（skill / subagent） | `run` / `resume` | 派发新任务、续接已有会话 |
 
 ## 给你用的命令
 
-### list — 浏览历史任务
+### list / ls — 浏览历史任务
 
 ```bash
 handoff list [--uuid] [--cwd]
+handoff ls [--uuid] [--cwd]
 ```
 
 打开交互式 TUI，浏览全部历史任务：
@@ -40,23 +41,6 @@ handoff tail [<run-id|seq>]
 ```
 
 实时跟踪某条 run 的输出流（类似 `tail -f`）。省略参数则跟踪最近一次 run。适合诊断或围观后台任务执行过程。
-
-### env — 查看路径
-
-```bash
-handoff env
-```
-
-输出 4 行 `key=绝对路径`，供人和脚本使用：
-
-```text
-config=/Users/sam/.handoff/config.yaml
-backend_types=<安装包内 backend_types.yaml 的实际绝对路径>
-tasks=/Users/sam/.handoff/tasks
-runs=/Users/sam/.handoff/runs
-```
-
-不初始化 Config——路径信息不应因配置损坏而不可得。
 
 ### init — 初始化配置
 
@@ -92,7 +76,7 @@ handoff resume [<run-id|seq>] [--pro] [--cwd <dir>] [(<input-file|-> | --text <p
 | `--pro` | 用该 backend 的 `pro_model` | 不自动继承，需再次显式带上 |
 | 会话句柄 | 新 run_id（如 `hd-0611-03`） | 每轮分配新 run_id，但多轮续接始终用**第一次**的 run_id（session_id 稳定不变） |
 
-**输出协议**：启动后立即向 stdout 和 stderr 各打印一行 `RESULT=<结果文件绝对路径>`。stderr 持续输出进度；stdout 在完成后打印最终结果正文。AI 调用者只关心 `RESULT=` 这一行——拿到路径后等通知、读 `.result.md`。
+**输出协议**：启动后立即向 stdout 和 stderr 各打印一行 `RESULT=<结果文件路径>`。stderr 持续输出进度；stdout 在完成后打印最终结果正文。AI 调用者只关心 `RESULT=` 这一行——拿到路径后等通知、读 `.result.md`；面向用户回显时，home 下路径应缩写成 `~/.handoff/...`。
 
 ## 附录
 

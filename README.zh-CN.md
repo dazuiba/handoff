@@ -1,22 +1,22 @@
 <div align="center">
 
 # handoff
+**你的 coding agent 们，该互相协作了。**
 
-**你的 coding agent 们，该互相派活了。**
 
-在 Claude Code / Codex 里把活儿 handoff 给 DeepSeek，省下旗舰额度；
-在 DeepSeek 会话里把难题 handoff 给 Codex / Opus，借个脑子。
+<img src="assets/handoff-hero.jpg" width="100%" alt="hero">
+
+
+| 从 | → 派给 | 为什么 |
+| :-- | :-- | :-- |
+| Claude Code / Codex | **DeepSeek** | 执行性工作又快又便宜，旗舰额度留给决策 |
+| DeepSeek | **Codex / Opus** | 难题借个脑子，答案带回当前会话 |
+
 不用切来切去，也不丢上下文。
-
-[![PyPI](https://img.shields.io/pypi/v/handoff-cli)](https://pypi.org/project/handoff-cli/)
-[![Python](https://img.shields.io/pypi/pyversions/handoff-cli)](https://pypi.org/project/handoff-cli/)
 
 [English](README.md) · **简体中文**
 
 </div>
-
-<!-- assets/claude-code.jpg — 建议 720 宽 — 主演示图：Claude Code 里一句话派发，主会话只回显 RESULT=，完成后读 .result.md 汇报 -->
-<img src="assets/claude-code.jpg" width="720" alt="在 Claude Code 里把任务 handoff 给 DeepSeek">
 
 ## 为什么需要 handoff
 
@@ -63,15 +63,16 @@ handoff init
 
 ## 可以把活儿派给谁
 
-| 提示词 / agent | 派给谁 | 底层 | 适合 |
+| 你怎么说 | 从 | 派给 | 适合 |
 | --- | --- | --- | --- |
-| `/handoff-ds` | DeepSeek V4 | `claude -p`（DeepSeek Anthropic 端点） | 写代码、跑测试、重构、批量修改等执行性工作 |
-| `/handoff-codex` | Codex (GPT-5.5) | `codex exec` | 复杂推理、第二意见、疑难调试 |
-| `/handoff-opus` | Claude Opus | `claude -p` | 需要顶级模型出马的关键决策 |
+| `/handoff-ds` | Claude Code | DeepSeek V4 | 写代码、跑测试、重构、批量修改等执行性工作 |
+| `handoff-ds`（subagent） | Codex | DeepSeek V4 | 同上——你人在 Codex 里时走这条 |
+| `/handoff-codex` | Claude Code | Codex (GPT-5.5) | 复杂推理、第二意见、疑难调试 |
+| `/handoff-opus` | Claude Code | Claude Opus | 需要顶级模型出马的关键决策 |
 
-> Codex 里没有 slash 命令，对应的是同名 subagent：说「让 `handoff-ds` 执行上述任务」即可。
+> Codex 里没有 slash 命令，所以那行是同名 subagent：说「让 `handoff-ds` 执行上述任务」即可。
 
-三个目标开箱即用：opus / codex 走你本机的登录态，零配置；deepseek 只需 token。
+三个目标开箱即用：opus / codex 走你本机的登录态，零配置；deepseek 只需 token。底层分别是 `claude -p`（deepseek 走其 Anthropic 端点，opus 走本机登录态）和 `codex exec`。
 
 ## 任务派出去之后
 
@@ -81,7 +82,7 @@ handoff init
 <tr>
 <td width="50%" valign="top">
 
-**`handoff list`** — 交互式 TUI，浏览全部历史任务。看 prompt 全文、实时状态、最终结果；选中按 `G` 直接把那次会话重新加载进来接着聊。
+**`handoff list` / `handoff ls`** — 交互式 TUI，浏览全部历史任务。看 prompt 全文、实时状态、最终结果；选中按 `G` 直接把那次会话重新加载进来接着聊。
 
 </td>
 <td width="50%" valign="top">

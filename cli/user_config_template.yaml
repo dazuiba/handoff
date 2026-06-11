@@ -14,18 +14,24 @@ backends:
     model: deepseek-v4-flash
     pro_model: "deepseek-v4-pro[1m]"
     env:
-      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
-      ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"   # 或直接写 sk-...
       ANTHROPIC_MODEL: "{model}"
 
-  opus:               # 走本机 claude 登录态，零配置
+      ## you can also use opencode:
+      ## @see  https://github.com/iTzFaisal/oc-cc-proxy.git
+      # ANTHROPIC_BASE_URL: http://127.0.0.1:4000 
+      # ANTHROPIC_AUTH_TOKEN: unused      
+
+      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+      ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"   # 或直接写 sk-...
+
+  opus:            
     type: claude
-    model: claude-opus-4-8
-    pro_model: claude-opus-4-8
+    model: sonnet
+    pro_model: opus #you can change to Fable 5
     env:
       ANTHROPIC_MODEL: "{model}"
 
-  codex:              # 走本机 codex 登录态，零配置；模型经 -m 传入
+  codex:            
     type: codex
-    model: gpt-5.5
+    model: gpt-5.5 # you can change to gpt-5.4
     pro_model: gpt-5.5

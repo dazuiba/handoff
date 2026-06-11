@@ -26,6 +26,50 @@ UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 
+# New run_id format: <mmdd>-<backend2>-<SEQ_CODE>-<slug>
+# e.g. 0611-ds-03-fix-auth
+_NEW_RUN_ID_RE = re.compile(
+    r"^(\d{4})-([a-z]{2})-([0-9A-Z]{2})-(.+)$"
+)
+
+# Explicit backend abbreviation mapping; others fall back to first 2 chars of name
+_BACKEND_ABBREV: dict[str, str] = {
+    "deepseek": "ds",
+    "codex": "cx",
+}
+
+
+def backend_abbrev(backend_name: str) -> str:
+    """Return 2-char abbreviation for a backend name."""
+    name = backend_name.lower()
+    return _BACKEND_ABBREV.get(name, name[:2])
+
+
+def slug_clean(raw: str) -> str:
+    """Sanitise a user-supplied slug: lowercase, only [a-z0-9-], max 3 dash-separated words.
+
+    Returns 'task' if the input is empty after cleaning.
+    """
+    s = raw.lower()
+    s = re.sub(r"[^a-z0-9-]", "-", s)
+    s = re.sub(r"-+", "-", s).strip("-")
+    # Keep at most 3 words (segments separated by '-')
+    parts = s.split("-")
+    parts = [p for p in parts if p]
+    s = "-".join(parts[:3])
+    return s or "task"
+
+
+def parse_new_run_id(stem: str) -> Optional[tuple[str, str, str, str]]:
+    """Parse a new-format run_id stem.
+
+    Returns (mmdd, backend2, seq_code, slug) or None if it doesn't match.
+    """
+    m = _NEW_RUN_ID_RE.match(stem)
+    if not m:
+        return None
+    return m.group(1), m.group(2), m.group(3), m.group(4)
+
 
 # ── migration ──────────────────────────────────────────────────────────────────
 
@@ -175,6 +219,8 @@ def create_run(
     prompt_text: str,
     backend_name: str = "",
     session_id: Optional[str] = None,
+    slug: str = "task",
+    run_id_override: Optional[str] = None,
 ):
     """Allocate a new run inside a BEGIN IMMEDIATE transaction.
 
@@ -186,6 +232,12 @@ def create_run(
     `resume` continuation it is the parent conversation's session_id, so the new
     row (new run_id/seq/files) shares one claude session across turns.
 
+    `slug` is appended to the run_id (≤3 dash-separated words, cleaned by slug_clean).
+
+    `run_id_override` is used when adopting a pre-allocated run_id from `handoff new`.
+    When set, the seq counter is NOT incremented — the counter was already bumped by
+    `new`.  The seq and seq_code are extracted from the override run_id.
+
     Returns (run_id, uuid, jsonl_path).  Caller must commit/rollback.
     """
     conn.execute("BEGIN IMMEDIATE")
@@ -193,23 +245,42 @@ def create_run(
     today_iso = today.isoformat()
     mmdd = today.strftime("%m%d")
 
-    row = conn.execute(
-        "SELECT last_n FROM run_counters WHERE day = ?", (today_iso,)
-    ).fetchone()
-    n = (row[0] + 1) if row else 1
+    if run_id_override:
+        # Adopt a pre-allocated run_id.  Parse seq_code from it to fill seq.
+        parsed = parse_new_run_id(run_id_override)
+        if parsed is None:
+            conn.execute("ROLLBACK")
+            print(f"handoff: cannot parse adopted run_id '{run_id_override}'", file=sys.stderr)
+            sys.exit(2)
+        _mmdd, _b2, seq_code, _slug = parsed
+        try:
+            n = seq_code_to_counter(seq_code)
+        except ValueError:
+            conn.execute("ROLLBACK")
+            print(f"handoff: invalid seq_code in run_id '{run_id_override}'", file=sys.stderr)
+            sys.exit(2)
+        run_id = run_id_override
+    else:
+        row = conn.execute(
+            "SELECT last_n FROM run_counters WHERE day = ?", (today_iso,)
+        ).fetchone()
+        n = (row[0] + 1) if row else 1
 
-    if n > _MAX_DAILY:
-        conn.execute("ROLLBACK")
-        print("handoff: exceeded maximum daily run count (ZZ = 1035)", file=sys.stderr)
-        sys.exit(2)
+        if n > _MAX_DAILY:
+            conn.execute("ROLLBACK")
+            print("handoff: exceeded maximum daily run count (ZZ = 1035)", file=sys.stderr)
+            sys.exit(2)
 
-    conn.execute(
-        "INSERT OR REPLACE INTO run_counters (day, last_n) VALUES (?, ?)",
-        (today_iso, n),
-    )
+        conn.execute(
+            "INSERT OR REPLACE INTO run_counters (day, last_n) VALUES (?, ?)",
+            (today_iso, n),
+        )
 
-    seq_code = counter_to_seq_code(n)
-    run_id = f"hd-{mmdd}-{seq_code}"
+        seq_code = counter_to_seq_code(n)
+        b2 = backend_abbrev(backend_name) if backend_name else "xx"
+        clean = slug_clean(slug)
+        run_id = f"{mmdd}-{b2}-{seq_code}-{clean}"
+
     uid = str(_uuid.uuid4()).lower()
     sess = session_id or uid
     jsonl_path = os.path.join(DB_DIR, f"{run_id}-{uid}.jsonl")
@@ -296,7 +367,31 @@ def task_paths(run_id: str):
     """Return (prompt, out, result) paths under TASKS_DIR using run_id as basename."""
     os.makedirs(TASKS_DIR, exist_ok=True)
     return (
-        os.path.join(TASKS_DIR, f"{run_id}.prompt.txt"),
+        os.path.join(TASKS_DIR, f"{run_id}.prompt.md"),
         os.path.join(TASKS_DIR, f"{run_id}.out.txt"),
         os.path.join(TASKS_DIR, f"{run_id}.result.md"),
     )
+
+
+def alloc_seq(conn: sqlite3.Connection) -> tuple[int, str]:
+    """Atomically increment today's run counter and return (n, seq_code).
+
+    Used by `handoff new` to pre-allocate a seq without creating a run row.
+    Caller must hold (or acquire) a transaction.
+    """
+    today = datetime.date.today().isoformat()
+    conn.execute("BEGIN IMMEDIATE")
+    row = conn.execute(
+        "SELECT last_n FROM run_counters WHERE day = ?", (today,)
+    ).fetchone()
+    n = (row[0] + 1) if row else 1
+    if n > _MAX_DAILY:
+        conn.execute("ROLLBACK")
+        print("handoff: exceeded maximum daily run count (ZZ = 1035)", file=sys.stderr)
+        sys.exit(2)
+    conn.execute(
+        "INSERT OR REPLACE INTO run_counters (day, last_n) VALUES (?, ?)",
+        (today, n),
+    )
+    conn.commit()
+    return n, counter_to_seq_code(n)

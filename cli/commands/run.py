@@ -6,7 +6,10 @@ import os
 import sys
 import datetime
 
-from ..core import get_db, create_run, task_paths, UUID_RE
+from ..core import (
+    get_db, create_run, task_paths, UUID_RE,
+    TASKS_DIR, parse_new_run_id, backend_abbrev,
+)
 from ..backend import (
     set_backend_env,
     build_args,
@@ -17,6 +20,21 @@ from ..backend import (
 )
 from ..stream import execute_run
 from ..config import Config
+
+
+def _is_adopted_path(input_src: str) -> bool:
+    """Return True if input_src is a .prompt.md file inside TASKS_DIR with new run_id format."""
+    if not input_src or input_src == "-":
+        return False
+    abs_src = os.path.abspath(input_src)
+    tasks_dir = os.path.abspath(TASKS_DIR)
+    if not abs_src.startswith(tasks_dir + os.sep):
+        return False
+    basename = os.path.basename(abs_src)
+    if not basename.endswith(".prompt.md"):
+        return False
+    stem = basename[: -len(".prompt.md")]
+    return parse_new_run_id(stem) is not None
 
 
 def cmd_run(argv: list[str], config: Config):
@@ -95,6 +113,9 @@ def cmd_run(argv: list[str], config: Config):
         print(f"handoff run: cwd not found: {cwd}", file=sys.stderr)
         sys.exit(2)
 
+    # Determine prompt source and whether to adopt a pre-allocated run_id.
+    adopted_run_id: str | None = None
+
     if text_mode:
         if not text_parts:
             print("handoff run: --text requires a value", file=sys.stderr)
@@ -103,21 +124,48 @@ def cmd_run(argv: list[str], config: Config):
         if not prompt_text:
             print("handoff run: --text requires a non-empty value", file=sys.stderr)
             sys.exit(2)
+        slug = "from-text"
     elif input_src == "-" or (not input_src and not sys.stdin.isatty()):
         prompt_text = sys.stdin.read()
+        slug = "from-stdin"
     elif input_src:
         if not os.path.isfile(input_src):
             print(f"handoff run: input file not found: {input_src}", file=sys.stderr)
             sys.exit(2)
-        with open(input_src) as f:
-            prompt_text = f.read()
+
+        if _is_adopted_path(input_src):
+            # Adopt: file is already at the canonical tasks/ path with new format.
+            stem = os.path.basename(input_src)[: -len(".prompt.md")]
+            parsed = parse_new_run_id(stem)  # guaranteed non-None by _is_adopted_path
+            _mmdd, file_b2, _seq_code, _slug = parsed  # type: ignore[misc]
+
+            # Validate backend2 consistency.
+            backend_name_candidate = backend_arg or config.default_backend
+            expected_b2 = backend_abbrev(backend_name_candidate)
+            if file_b2 != expected_b2:
+                print(
+                    f"handoff run: adopted file has backend '{file_b2}' but "
+                    f"--backend resolves to '{backend_name_candidate}' (abbrev '{expected_b2}'). "
+                    f"Use --backend matching the file's backend.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
+            with open(input_src) as f:
+                prompt_text = f.read()
+            adopted_run_id = stem
+            slug = _slug  # unused when adopting, but kept for clarity
+        else:
+            with open(input_src) as f:
+                prompt_text = f.read()
+            slug = "from-file"
     else:
         print("handoff run: input file required, or use --text <prompt...> / pipe via '-'", file=sys.stderr)
         sys.exit(2)
 
     backend_name = backend_arg or config.default_backend
 
-    _execute(cwd, prompt_text, backend_name, pro, config)
+    _execute(cwd, prompt_text, backend_name, pro, config, slug=slug, adopted_run_id=adopted_run_id)
 
 
 def _execute(
@@ -127,6 +175,8 @@ def _execute(
     pro: bool,
     config: Config,
     resume_session_id: str | None = None,
+    slug: str = "task",
+    adopted_run_id: str | None = None,
 ):
     """Shared execution path for file, stdin, and --text run modes.
 
@@ -134,6 +184,10 @@ def _execute(
     claude conversation (`claude -p ... --resume <id>`) rather than starting a
     fresh session; the new row still gets its own run_id/seq/files but shares the
     session_id. Used by `handoff resume <seq> <prompt>`.
+
+    When `adopted_run_id` is given, the pre-allocated run_id from `handoff new`
+    is adopted: the seq counter is NOT re-incremented, and the prompt file is
+    already at the canonical tasks/ path (not written again).
     """
     backend_cfg = config.get_backend(backend_name)
     if not backend_cfg:
@@ -147,16 +201,36 @@ def _execute(
     ensure_backend_token_ready(backend_name, backend_cfg, config.user_config_path)
 
     conn = get_db()
+
+    # Check for duplicate dispatch when adopting a pre-allocated run_id.
+    if adopted_run_id:
+        existing = conn.execute(
+            "SELECT run_id FROM runs WHERE run_id = ?", (adopted_run_id,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            print(
+                f"handoff run: run_id '{adopted_run_id}' already exists in DB — "
+                f"duplicate dispatch rejected.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
     run_id, uid, jsonl_path = create_run(
-        conn, cwd, prompt_text, backend_name, session_id=resume_session_id
+        conn, cwd, prompt_text, backend_name,
+        session_id=resume_session_id,
+        slug=slug,
+        run_id_override=adopted_run_id,
     )
     conn.commit()
 
     # tasks dir files
     prompt_path, out_path, result_path = task_paths(run_id)
 
-    with open(prompt_path, "w") as pf:
-        pf.write(prompt_text)
+    # Write prompt file only when not adopting (adopted file is already in place).
+    if not adopted_run_id:
+        with open(prompt_path, "w") as pf:
+            pf.write(prompt_text)
 
     # Resolve model
     model = resolve_backend_model(backend_cfg, pro)

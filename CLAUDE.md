@@ -12,7 +12,14 @@ A CLI proxy that dispatches coding tasks to configurable AI backends — Claude 
 # Install: uv tool install -e .  then run init
 handoff --help
 
-# Dispatch a task
+# Pre-allocate a run_id and get the canonical prompt file path
+p=$(handoff new --backend deepseek --slug fix-auth)
+cat > "$p" <<'EOF'
+...prompt...
+EOF
+handoff run --backend deepseek "$p"
+
+# Other dispatch modes (allocate seq automatically)
 echo "Refactor X and add tests" | handoff run -
 handoff run --text "smoke test"
 handoff run --backend codex --pro - <<'EOF'
@@ -20,7 +27,7 @@ handoff run --backend codex --pro - <<'EOF'
 EOF
 
 # Browse/manage past runs
-handoff list             # interactive TUI (curses) when stdout is a terminal
+handoff list             # interactive TUI (curses) when stdout is a terminal; `handoff ls` is an alias
 handoff resume <seq>     # reopen a past conversation interactively in claude/codex
 handoff resume <seq> -   # dispatch a follow-up task to that conversation (heredoc)
 handoff tail <run-id>    # live-tail a run's output stream
@@ -40,7 +47,7 @@ There are no test suites or linting setup in this repo.
 
 ### Command dispatch (`cli/main.py`)
 
-`main()` parses `sys.argv[1]` and dispatches to the matching `cli/commands/<subcmd>.py`. Known commands: `run`, `list`, `resume`, `tail`, `env`, `init`. Before dispatching, `_migrate_legacy_state()` checks for a legacy `~/.ds-cli/` directory and renames it to `~/.handoff/` if the new directory doesn't exist yet. `env` and `init` do NOT initialize `Config`; other subcommands do (validates user config, creates DB).
+`main()` parses `sys.argv[1]` and dispatches to the matching `cli/commands/<subcmd>.py`. Known commands: `run`, `new`, `list`/`ls`, `resume`, `tail`, `env`, `init`. Before dispatching, `_migrate_legacy_state()` checks for a legacy `~/.ds-cli/` directory and renames it to `~/.handoff/` if the new directory doesn't exist yet. `env` and `init` do NOT initialize `Config`; other subcommands do (validates user config, creates DB).
 
 ### Config (`cli/config.py`)
 
@@ -50,8 +57,9 @@ Two-layer split: `cli/backend_types.yaml` (mechanism) defines HOW each type is l
 
 All state lives under `~/.handoff/`:
 - `runs/handoff.db` — SQLite (WAL mode) with `runs` table (seq, run_id, uuid, session_id, cwd, prompt, jsonl_path, status, backend) and `run_counters` (daily auto-increment per day). `session_id` is the underlying conversation: equals `uuid` for a fresh run, or the parent's `session_id` for a `resume` continuation. `get_db()` performs in-place `ALTER TABLE` migrations to add `session_id` (backfilled from `uuid`) on old databases.
-- `tasks/` — per-run files: `{run_id}.prompt.txt`, `.out.txt` (progress), `.result.md` (final)
-- Run IDs: `hd-<MMDD>-<SEQ_CODE>` where SEQ_CODE is a 2-char encoding: `01`–`99` for 1–99, then `A0`–`ZZ` for 100–1035
+- `tasks/` — per-run files: `{run_id}.prompt.md`, `.out.txt` (progress), `.result.md` (final)
+- Run IDs: `<mmdd>-<backend2>-<SEQ_CODE>-<slug>` (e.g. `0611-ds-03-fix-auth`). `<backend2>` is a 2-char abbreviation: deepseek→ds, codex→cx, opus→op, others→first 2 chars. SEQ_CODE is a 2-char encoding: `01`–`99` for 1–99, then `A0`–`ZZ` for 100–1035. `<slug>` is ≤3 dash-separated lowercase words supplied by caller; automatic slugs: stdin→`from-stdin`, --text→`from-text`, external file→`from-file`, no-slug→`task`.
+- `handoff new --backend <name> [--slug <slug>]`: pre-allocates a seq/run_id and prints the canonical `.prompt.md` path (does NOT create the file or DB row). Caller writes prompt to this path, then `handoff run <path>` adopts it.
 - Automatic migration: on startup, if `~/.ds-cli/` exists and `~/.handoff/` doesn't, the entire directory is renamed and `dscli.db` becomes `handoff.db`
 
 ### Backend resolution (`cli/backend.py`)
@@ -91,10 +99,10 @@ Textual-based interactive listing for `handoff list`. Renders a scrollable `Data
 ### Skill/subagent files
 
 All files live in `cli/skills/` (distributed with the wheel):
-- `handoff-ds/SKILL.md` — Claude Code skill for DeepSeek backend (`--backend deepseek`)
-- `handoff-codex/SKILL.md` — Claude Code skill for Codex backend (`--backend codex`)
-- `handoff-opus/SKILL.md` — Claude Code skill for Opus backend (`--backend opus`)
-- `handoff-ds.toml` — Codex subagent that forwards prompt files via `handoff run --backend deepseek <prompt-file> >/dev/null`
+- `handoff-ds/SKILL.md` — Claude Code skill for DeepSeek backend (`--backend deepseek`). Protocol: `handoff new --backend deepseek --slug <slug>` → write prompt to returned path → `handoff run --backend deepseek <path>`
+- `handoff-codex/SKILL.md` — Claude Code skill for Codex backend (`--backend codex`). Same protocol with `--backend codex`.
+- `handoff-opus/SKILL.md` — Claude Code skill for Opus backend (`--backend opus`). Same protocol with `--backend opus`.
+- `handoff-ds.toml` — Codex subagent. Caller runs `handoff new --backend deepseek --slug <slug>`, writes prompt to returned path, passes `PROMPT_FILE=<path>` to subagent; subagent runs `handoff run --backend deepseek <PROMPT_FILE> >/dev/null`
 
 `handoff init` creates hard/soft links from `cli/skills/` into `~/.codex/agents/` and `~/.claude/skills/`.
 

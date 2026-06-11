@@ -33,7 +33,7 @@ subagent 的完整指令见 `cli/skills/handoff-ds.toml`。
 handoff 与 AI 调用者之间的交互只靠一行文本：
 
 ```
-RESULT=/Users/sam/.handoff/tasks/hd-0611-03.result.md
+RESULT=~/.handoff/tasks/hd-0611-03.result.md
 ```
 
 这行同时编码了两条信息：

@@ -12,19 +12,21 @@ def usage(config=None):
   handoff --help
   handoff env
   handoff init      [-y|--yes]
-  handoff list      [--uuid] [--cwd]
+  handoff new       --backend <name> [--slug <slug>]
+  handoff list|ls   [--uuid] [--cwd]
   handoff run       [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <prompt...>)
   handoff resume    [<run-id|seq>] [--pro] [--cwd <dir>] [(<input-file|-> | --text <prompt...>)]
   handoff tail [<run-id|seq>]
 
   handoff env              — print config / data paths (works even with broken config)
-  handoff list             — browse and inspect your past sessions
+  handoff new              — pre-allocate a run_id; prints .prompt.md path to stdout
+  handoff list             — browse and inspect your past sessions (`ls` alias supported)
   handoff run --text hi    — quick smoke-test / debug your config.yaml
   handoff resume <seq>     — reopen a past conversation (interactive)
   handoff resume <seq> -   — dispatch a follow-up task to that conversation (heredoc/--text)
   handoff tail             — live-tail a run's stream
 
-Run ids: hd-<MMDD>-<SEQ_CODE>  (seq_code: daily counter, 01..99, A0..ZZ)
+Run ids: <mmdd>-<backend2>-<SEQ_CODE>-<slug>  (e.g. 0611-ds-03-fix-auth)
 --cwd defaults to the current directory of the calling process.
 --backend picks a backend (default: first entry in config.yaml backends).
 --pro uses the backend's pro_model. A resume stays on its original backend."""
@@ -70,11 +72,11 @@ def main():
         cmd_env(rest)
         return
 
-    known = {"run", "list", "resume", "tail"}
+    known = {"run", "list", "ls", "resume", "tail", "new"}
     if subcmd not in known:
         print(
             f"handoff: unknown subcommand '{subcmd}' — expected: "
-            f"env, init, list, run, resume, tail",
+            f"env, init, list, ls, new, run, resume, tail",
             file=sys.stderr,
         )
         usage()
@@ -85,12 +87,15 @@ def main():
     from .commands.list import cmd_list
     from .commands.resume import cmd_resume
     from .commands.tail import cmd_tail
+    from .commands.new import cmd_new
 
     config = Config()
 
     if subcmd == "run":
         cmd_run(rest, config)
-    elif subcmd == "list":
+    elif subcmd == "new":
+        cmd_new(rest, config)
+    elif subcmd in ("list", "ls"):
         cmd_list(rest, config)
     elif subcmd == "resume":
         cmd_resume(rest, config)

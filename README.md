@@ -1,22 +1,22 @@
 <div align="center">
 
 # handoff
+**Your coding agents should be collaborating with each other.**
 
-**Your coding agents should be delegating to each other.**
 
-Hand work off to DeepSeek from inside Claude Code / Codex and save your flagship quota;
-hand a hard problem off to Codex / Opus from inside a DeepSeek session and borrow a brain.
+<img src="assets/handoff-hero.jpg" width="100%" alt="hero">
+
+
+| From | → Hand off to | Why |
+| :-- | :-- | :-- |
+| Claude Code / Codex | **DeepSeek** | Execution work is fast and cheap; save flagship quota for decisions |
+| DeepSeek | **Codex / Opus** | Borrow a brain for hard problems, bring the answer back to your session |
+
 No tool-switching, no lost context.
-
-[![PyPI](https://img.shields.io/pypi/v/handoff-cli)](https://pypi.org/project/handoff-cli/)
-[![Python](https://img.shields.io/pypi/pyversions/handoff-cli)](https://pypi.org/project/handoff-cli/)
 
 **English** · [简体中文](README.zh-CN.md)
 
 </div>
-
-<!-- assets/claude-code.jpg — ~720px wide — hero shot: one-sentence dispatch in Claude Code, main session only echoes RESULT=, agent reads .result.md and reports back -->
-<img src="assets/claude-code.jpg" width="720" alt="Handing a task off to DeepSeek from Claude Code">
 
 ## Why handoff
 
@@ -63,15 +63,16 @@ handoff init
 
 ## Who you can hand work off to
 
-| Prompt / agent | Delegates to | Under the hood | Best for |
+| What you say | From | Hands off to | Best for |
 | --- | --- | --- | --- |
-| `/handoff-ds` | DeepSeek V4 | `claude -p` (DeepSeek's Anthropic-compatible endpoint) | Execution work: writing code, running tests, refactors, bulk edits |
-| `/handoff-codex` | Codex (GPT-5.5) | `codex exec` | Heavy reasoning, second opinions, gnarly debugging |
-| `/handoff-opus` | Claude Opus | `claude -p` | Decisions that deserve the top model |
+| `/handoff-ds` | Claude Code | DeepSeek V4 | Execution work: writing code, running tests, refactors, bulk edits |
+| `handoff-ds` (subagent) | Codex | DeepSeek V4 | Same as above — use this when you're inside Codex |
+| `/handoff-codex` | Claude Code | Codex (GPT-5.5) | Heavy reasoning, second opinions, gnarly debugging |
+| `/handoff-opus` | Claude Code | Claude Opus | Decisions that deserve the top model |
 
-> Codex has no slash commands; use the subagent of the same name instead — say "have `handoff-ds` execute the task above."
+> Codex has no slash commands, so that row is the subagent of the same name — say "have `handoff-ds` execute the task above."
 
-All three targets work out of the box: opus / codex reuse your local logins with zero config; deepseek only needs a token.
+All three targets work out of the box: opus / codex reuse your local logins with zero config; deepseek only needs a token. Under the hood they run `claude -p` (deepseek via its Anthropic-compatible endpoint, opus via your local login) and `codex exec`.
 
 ## After a task is dispatched
 
@@ -81,7 +82,7 @@ Dispatching and resuming are the AI's job (`handoff run` / `handoff resume` unde
 <tr>
 <td width="50%" valign="top">
 
-**`handoff list`** — interactive TUI over your full task history. Read the full prompt, live status, and final result; press `G` on a row to reload that conversation and keep chatting.
+**`handoff list` / `handoff ls`** — interactive TUI over your full task history. Read the full prompt, live status, and final result; press `G` on a row to reload that conversation and keep chatting.
 
 </td>
 <td width="50%" valign="top">
@@ -168,19 +169,6 @@ backends:
   codex:                             # local codex login — zero config
     type: codex
     ...
-```
-
-Want another Anthropic-compatible endpoint? Add a block under `backends`:
-
-```yaml
-backends:
-  kimi:
-    type: claude
-    model: kimi-k3
-    env:
-      ANTHROPIC_BASE_URL: https://api.moonshot.cn/anthropic
-      ANTHROPIC_AUTH_TOKEN: "${MOONSHOT_API_KEY}"
-      ANTHROPIC_MODEL: "{model}"
 ```
 
 The env block is entirely yours — every key=value you set is exported before the CLI launches. `{model}` substitutes the resolved model name, `${ENV_VAR}` expands from your shell.

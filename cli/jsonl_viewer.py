@@ -42,10 +42,12 @@ class JsonlViewerScreen(Screen):
     """
 
     BINDINGS = [
-        Binding("escape,left", "back", "Back", show=True),
+        Binding("escape", "back", "← Back", show=True),
         Binding("o", "go_resume", "Open in Claude", show=True),
         Binding("c", "copy_session", "Copy Session", show=True),
         Binding("q", "quit", "Quit", show=True),
+        Binding("tab", "next_tab", "Next Tab", show=True),
+        Binding("shift+tab", "prev_tab", "Prev Tab", show=True),
         Binding("1", "show_tab('stream')", "Stream", show=True),
         Binding("2", "show_tab('output')", "Output", show=True),
         Binding("3", "show_tab('prompt')", "Prompt", show=True),
@@ -100,16 +102,16 @@ class JsonlViewerScreen(Screen):
             id="info_bar",
         )
         with TabbedContent(initial="stream"):
-            with TabPane("Stream JSONL", id="stream"):
+            with TabPane("1 Stream JSONL", id="stream"):
                 with VerticalScroll(id="stream_scroll"):
                     yield Static("Loading…", id="stream_text", markup=False)
-            with TabPane("Output .out", id="output"):
+            with TabPane("2 Output .out", id="output"):
                 with VerticalScroll(id="output_scroll"):
                     yield Static("Loading…", id="output_text", markup=False)
-            with TabPane("Prompt", id="prompt"):
+            with TabPane("3 Prompt", id="prompt"):
                 with VerticalScroll(id="prompt_scroll"):
                     yield Static("", id="prompt_text", markup=False)
-            with TabPane("Result", id="result"):
+            with TabPane("4 Result", id="result"):
                 with VerticalScroll(id="result_scroll"):
                     yield Static("", id="result_text", markup=False)
         yield Footer()
@@ -351,6 +353,32 @@ class JsonlViewerScreen(Screen):
     def action_show_tab(self, tab_id: str) -> None:
         try:
             self.query_one(TabbedContent).active = tab_id
+        except Exception:
+            pass
+
+    def action_next_tab(self) -> None:
+        try:
+            tabs = self.query_one(TabbedContent)
+            ids = [pane.id for pane in tabs.query(TabPane)]
+            if not ids:
+                return
+            cur = tabs.active
+            idx = ids.index(cur) if cur in ids else -1
+            next_id = ids[(idx + 1) % len(ids)]
+            tabs.active = next_id
+        except Exception:
+            pass
+
+    def action_prev_tab(self) -> None:
+        try:
+            tabs = self.query_one(TabbedContent)
+            ids = [pane.id for pane in tabs.query(TabPane)]
+            if not ids:
+                return
+            cur = tabs.active
+            idx = ids.index(cur) if cur in ids else 0
+            prev_id = ids[(idx - 1) % len(ids)]
+            tabs.active = prev_id
         except Exception:
             pass
 
