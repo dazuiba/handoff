@@ -1,9 +1,9 @@
 ---
-name: ds-cli
-description: 把一个独立的编码或调查任务整包交给 ds-cli 执行。后台运行，完成后自动通知。支持并行多任务，支持续接（resume）上次会话继续派发后续任务。
+name: handoff-codex
+description: 向 Codex (GPT-5.5) 咨询复杂问题 / 要第二意见 / 派发需要强推理的任务。后台运行，完成后自动通知。支持并行多任务，支持续接（resume）上次会话继续派发后续任务。
 ---
 
-# ds-cli Skill
+# handoff-codex Skill
 
 <interaction_contract>
 This skill is executed by Claude Code (an AI agent). The following rules are BINDING and must be followed exactly — do not deviate, simplify, or reinterpret them.
@@ -11,28 +11,26 @@ This skill is executed by Claude Code (an AI agent). The following rules are BIN
 ## 命令模板（每次必须照抄，不得修改结构）
 
 ```bash
-ds-cli run - <<'__DS_EOF__'
+handoff run --backend codex - <<'__HF_EOF__'
 [prompt 内容]
-__DS_EOF__
+__HF_EOF__
 ```
 
 **关键规则（违反任何一条都会导致命令失败或行为异常）：**
 
-- `run_in_background: true` **必须启用**：ds-cli 耗时 2~20 分钟，前台执行会阻塞整个会话
-- heredoc 界定符用 `__DS_EOF__`，prompt 内容直接粘贴进去，不转义
-- 用户明确要求 fast/快速模式时，在 `ds-cli run` 后加 `--fast`，即 `ds-cli run --fast - <<'__DS_EOF__'`
-- 用户明确提到 `pro`（或要求用更强/专业模型处理复杂任务）时，在 `ds-cli run` 后加 `--pro`
-- `--fast` 和 `--pro` 可以同时使用，顺序无所谓
-- **不要**外部生成时间戳或拼文件名；**不要**用 `> RESULT 2> OUT` 重定向——ds-cli 自己管命名和落盘
+- `run_in_background: true` **必须启用**：handoff 耗时 2~20 分钟，前台执行会阻塞整个会话
+- heredoc 界定符用 `__HF_EOF__`，prompt 内容直接粘贴进去，不转义
+- 用户明确提到 `pro`（或要求用更强/专业模型处理复杂任务）时，在 `handoff run` 后加 `--pro`
+- **不要**外部生成时间戳或拼文件名；**不要**用 `> RESULT 2> OUT` 重定向——handoff 自己管命名和落盘
 
-**启动命令后**（`run_in_background: true` 返回后），**从 stdout 捕获 ds-cli 打印的唯一有用的一行 `RESULT=<绝对路径>`**，并在面向用户的 assistant 消息里回显这一条路径（完成后默认只读它）：
+**启动命令后**（`run_in_background: true` 返回后），**从 stdout 捕获 handoff 打印的唯一有用的一行 `RESULT=<绝对路径>`**，并在面向用户的 assistant 消息里回显这一条路径（完成后默认只读它）：
 
-- `RESULT=<绝对路径>`（最终结论文件，例如 `/Users/sam/.ds-cli/tasks/ds-0608-07.result.md`）
+- `RESULT=<绝对路径>`（最终结论文件，例如 `/Users/sam/.handoff/tasks/hd-0611-03.result.md`）
 
-**这条路径里同时编码了本次任务的 run_id**：去掉目录和 `.result.md` 后缀，文件名主干就是 run_id（上例 → `ds-0608-07`）。**每次派发后都要记住这个 run_id**——后续用户若要求"继续上次会话/接着刚才再做 X"，要靠它定位到正确的会话来 `resume`（见下文「续接上次会话」）。
+**这条路径里同时编码了本次任务的 run_id**：去掉目录和 `.result.md` 后缀，文件名主干就是 run_id（上例 → `hd-0611-03`）。**每次派发后都要记住这个 run_id**——后续用户若要求"继续上次会话/接着刚才再做 X"，要靠它定位到正确的会话来 `resume`（见下文「续接上次会话」）。
 
 其余无需你读取：
-- ds-cli 把克制的进度信息打在 **stderr**，Claude Code 的 shell view 会自动实时显示——你不用、也不要把它读进上下文。
+- handoff 把克制的进度信息打在 **stderr**，Claude Code 的 shell view 会自动实时显示——你不用、也不要把它读进上下文。
 - 进度日志同时落在与 `RESULT=` **同名的 `.out.txt`**（把 `.result.md` 换成 `.out.txt`），仅在诊断（无结果/超时）时才 `tail -f` 或 `Read`。
 - 输入文件 `.prompt.txt`（同名）已是你刚发的内容，无需回显。
 
@@ -49,7 +47,7 @@ __DS_EOF__
 
 ### 并行多任务
 
-在**同一条消息**里发出多个独立的 `run_in_background: true` Bash 调用，各自用 heredoc 传入不同的 prompt 内容。每个任务启动后分别从各自 stdout 捕获 `RESULT=` 路径（ds-cli 自动递增 seq）。每个任务完成时分别通知，分别读取对应的 `.result.md` 汇报。
+在**同一条消息**里发出多个独立的 `run_in_background: true` Bash 调用，各自用 heredoc 传入不同的 prompt 内容。每个任务启动后分别从各自 stdout 捕获 `RESULT=` 路径（handoff 自动递增 seq）。每个任务完成时分别通知，分别读取对应的 `.result.md` 汇报。
 
 ### 串行多任务
 
@@ -60,14 +58,14 @@ __DS_EOF__
 要接着某次任务继续（保留其上下文）而非开新会话时，用 `resume` 替代 `run`，其余约定（后台、捕获新 `RESULT=`、读 `.result.md`）完全相同：
 
 ```bash
-ds-cli resume <run_id> - <<'__DS_EOF__'
+handoff resume <run_id> --backend codex - <<'__HF_EOF__'
 [后续任务内容]
-__DS_EOF__
+__HF_EOF__
 ```
 
 - `<run_id>` 用该会话**首次**任务的 run_id（即上文那个文件名主干）；它是稳定句柄，每轮续接都用它，不要追每轮新生成的 run_id。
 - **必须带 prompt**（`-`/heredoc 或 `--text`）。不带 prompt 的 `resume <run_id>` 是交互式重开，后台会卡死。
-- 续接默认只继承 backend；原会话用过 `--fast`/`--pro` 的话，续接要再次带上才沿用同档模型。
+- 续接默认只继承 backend；原会话用过 `--pro` 的话，续接要再次带上才沿用 pro_model。
 - 不确定用户指哪次任务时，报候选 run_id + 摘要让其确认，别猜。
 
 ## 完成后

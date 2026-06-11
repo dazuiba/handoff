@@ -1,199 +1,178 @@
-# ds-cli
+<div align="center">
 
-[English](README.EN.md) · **中文**
+# handoff
 
-> **Delegate tasks to DeepSeek right inside your Claude Code / Codex sessions.**
+**Your coding agents should be delegating to each other.**
 
-让 **SOTA 旗舰模型**只做架构与决策，其余一切脏活累活全自动派发给 DeepSeek V4。
+Hand work off to DeepSeek from inside Claude Code / Codex and save your flagship quota;
+hand a hard problem off to Codex / Opus from inside a DeepSeek session and borrow a brain.
+No tool-switching, no lost context.
 
-`ds-cli` 是一个伪装成 `claude` 客户端的 DeepSeek 异步执行器。它把复杂任务派发到后台独立上下文运行
+[![PyPI](https://img.shields.io/pypi/v/handoff-cli)](https://pypi.org/project/handoff-cli/)
+[![Python](https://img.shields.io/pypi/pyversions/handoff-cli)](https://pypi.org/project/handoff-cli/)
 
+**English** · [简体中文](README.zh-CN.md)
 
-## 为什么要用它 / Why
+</div>
 
-一个被低估的事实:在写代码、跑测试这类**事务性工作**上,DeepSeek V4 已经比 Sonnet、GPT-5.4 更聪明,还更便宜。真正稀缺、值得为之付费的,只有那一两个站在顶端的模型(Opus / GPT-5.5)。
+<!-- assets/claude-code.jpg — ~720px wide — hero shot: one-sentence dispatch in Claude Code, main session only echoes RESULT=, agent reads .result.md and reports back -->
+<img src="assets/claude-code.jpg" width="720" alt="Handing a task off to DeepSeek from Claude Code">
 
-所以分工应该是:
+## Why handoff
 
-- **最聪明的旗舰模型只做三件事**:和你沟通、拆解任务、验收结果。
-- **其余一切"干活"**——写代码、跑测试、调试、改文件——全部交给 DeepSeek V4。
+If you juggle more than one coding agent, these will sound familiar:
 
-干同样的活,要花多少钱:
+- 💸 **"My Claude / Codex subscription never lasts the week"** — You say: *"Take the 3 tasks above and run them on 3 parallel `/handoff-ds`."* DeepSeek does execution work fast and cheap; save the flagship quota for decisions.
+- 🤔 **"DeepSeek is stuck — I'd like a second opinion from Codex"** — You say: *"Ask `/handoff-codex` what it thinks."* No new terminal, no re-explaining the background; the answer lands back in your current session.
+- 🔁 **"Pick up where the last dispatched task left off"** — You say: *"Resume that `/handoff-ds` session and do item 2."* Every file it changed, everything it read and concluded is still there.
+- 🔄 **"Trying another model means a fresh session and retelling the whole story"** — Don't switch. Stay in the session you know; handoff brokers the task in the middle and brings the result back.
 
-| 方案 | 相对单价(干同样的活) |
-| --- | --- |
-| Claude Sonnet | 1×(基准) |
-| DeepSeek 官方 API | **1/3** |
-| [OpenCode Go](https://opencode.ai/go?ref=D5926WCTD8)(含 DeepSeek V4) | **1/18** |
+And that's the entire user interface: **one sentence inside your agent session.**
 
-> OpenCode Go **$5/月** 相当于约 **$60** 的用量,即官方 DeepSeek 价格的 **1/6**;官方 DeepSeek 又是 Sonnet 的 1/3,所以 OpenCode 折合 Sonnet 基准 = 1/3 × 1/6 = **1/18**。
+## Quick start
 
-👉 旗舰模型用 **$20 的 Codex 套餐**指挥,干活挂 **$5 的 OpenCode Go**——一共 **$25/月,干出价值约 $200 的活(≈10×)**。
+```bash
+uv tool install handoff-cli
+handoff init        # creates the config, links skill / agent files
+```
 
-还有第二层好处:一个真实任务会产出几千行进度输出。直接在主会话里跑,这些噪音要么阻塞会话、要么被读进上下文,白白烧掉旗舰模型的 token。ds-cli 把执行整包外包,**主 session 只回灌一行 `RESULT=` 结果路径**;进度实时打在后台 shell view 里(见下方"查看与接管运行中的任务"),**不进**主上下文。
+Provide your DeepSeek token either way: set the `DEEPSEEK_API_KEY` environment variable, or put it in `~/.handoff/config.yaml`.
 
-## 怎么用
+Then go back to Claude Code and say:
 
-让你的 agent 先制定计划,再把执行交给 ds-cli。
+> Make a plan, then have `/handoff-ds` execute it.
 
-| | Claude Code | Codex |
-| --- | --- | --- |
-| 提示词 | "让 `/ds-cli` 执行上述任务" | "让 `ds-agent` 执行上述任务" |
-| 续接提示词 | "接着上次那个任务继续:<后续需求>" | "让 `ds-agent` 接着上次继续:<后续需求>" |
-| 机制 | 直接触发 `ds-cli` 命令(后台 shell) | 拉起 subagent 后台执行 |
-| 看进度 | 展开后台 shell view 或 ds-cli tail | ds-cli tail |
+The task runs in the background without blocking your session; when it finishes, the agent reads the result and reports back.
+
+Upgrade with `uv tool upgrade handoff-cli`.
 
 <details>
-<summary>为何codex/claude 机制不统一?</summary>
+<summary>No uv / installing from source?</summary>
 
 <br>
 
-- **Claude Code 对后台 shell 支持极好**:能以**通知**方式感知任务"完成",还能实时看进度(stderr)。所以直接把 `ds-cli` 跑在后台 shell 即可,主 session 全程不阻塞、也几乎不耗 token。
-- **Codex 不支持通知,只能轮询**:每轮询一次就消耗一次主 session 的 cache read,对动辄 5~10 分钟的任务会烧掉大量 token。但 Codex 能感知 **subagent 的完成事件**——所以改用一个廉价的 `gpt-5.4-mini` low-effort subagent,**阻塞式**调用 `ds-cli run ... >/dev/null`。stderr 会持续输出进度避免 subagent 长时间静默,stdout 的最终正文被丢弃,结束后只把一行 `RESULT=` 路径带回主 session。
+`pipx install handoff-cli` or `pip install handoff-cli` work just as well. From source:
+
+```bash
+git clone https://github.com/dazuiba/handoff && cd handoff
+uv tool install -e .
+handoff init
+```
 
 </details>
 
+## Who you can hand work off to
 
-### Claude Code — `/ds-cli` skill
+| Prompt / agent | Delegates to | Under the hood | Best for |
+| --- | --- | --- | --- |
+| `/handoff-ds` | DeepSeek V4 | `claude -p` (DeepSeek's Anthropic-compatible endpoint) | Execution work: writing code, running tests, refactors, bulk edits |
+| `/handoff-codex` | Codex (GPT-5.5) | `codex exec` | Heavy reasoning, second opinions, gnarly debugging |
+| `/handoff-opus` | Claude Opus | `claude -p` | Decisions that deserve the top model |
 
-> 制定计划,并让 `/ds-cli` 执行上述任务。
+> Codex has no slash commands; use the subagent of the same name instead — say "have `handoff-ds` execute the task above."
 
-每个任务会作为**后台 shell 命令**派发,点开即可实时查看 ds-cli 的执行进度;主 session 只拿到一行 `RESULT=` 结果路径。
+All three targets work out of the box: opus / codex reuse your local logins with zero config; deepseek only needs a token.
 
-<!-- 替换为: assets/claude-code.jpg — 建议 621 宽 — 换成一个"真实编码任务"(不要 print hi):展示后台派发 + 主 session 只回显 RESULT= + 完成后读 .result.md 汇报。 -->
-<img src="assets/claude-code.jpg" width="621" alt="Claude Code 后台派发 ds-cli">
+## After a task is dispatched
 
-### Codex — `ds-agent` subagent
-
-> 制定计划,并让 `ds-agent` 执行上述任务。
-
-Codex 会拉起 subagent 在后台阻塞执行;为避免把大段结果读进 subagent 上下文,`ds-agent` 丢弃 stdout 的最终正文,只在结束时带回一行 `RESULT=`。执行中的 stderr 进度会留给 subagent 防止长时间静默,需要主动查看时也可以用 `ds-cli tail`。
-
-<!-- 替换为: assets/codex.jpg — 建议 621 宽 — 重拍一张文字不被右侧截断的完整图。 -->
-<img src="assets/codex.jpg" width="621" alt="Codex 唤起 ds-agent subagent">
-
-这就是全部思路:旗舰模型负责拆解与验收,DeepSeek V4 负责廉价地执行。
-
-## 续接上次会话,接着派任务
-
-每次 `ds-cli` 任务底层都对应一个 claude 会话。你不必每次都从零开始——直接说"接着上次那个任务继续:<后续需求>",agent 就会把后续任务**派发到同一个会话**,保留前面的全部上下文(改过的文件、读过的代码、已有结论),而不是开一个一无所知的新会话。
-
-- **稳定句柄**:每次派发的 `RESULT=` 路径里都带着 run_id(如 `ds-0608-07`);续接只认这个 run_id,且多轮续接始终用**最初那个**——会话 id 不会变。
-- **两端通用**:Claude Code(`/ds-cli`)和 Codex(`ds-agent`)都支持,agent 会自动从上一次的 `RESULT=` 找到要续接的会话。
-- **命令行直连**:也可以自己用 `ds-cli resume <seq> - <<'EOF' ... EOF` 非交互派发后续任务,或 `ds-cli resume <seq>` 用 backend 把那次会话重新加载、接着交互聊。
-
-<!-- 替换为: assets/resume.jpg — 建议 621 宽 — 展示"接着上次继续"派发:主 session 引用上一条 RESULT= 的 run_id,续派后拿到新的 RESULT=,且结果体现上下文被保留。 -->
-<img src="assets/resume.jpg" width="621" alt="续接上次会话继续派发任务">
-
-## 查看与接管运行中的任务
-
-任务派发出去后,有两条途径看进度、甚至把它捞回来接着聊。
-
-**1. 在 Claude Code **:展开那条后台 shell,就能看到 `cclean` 压缩过的实时进度流——它走 shell view,**不进**主 session 上下文。
-
-<!-- 替换为: assets/shell.jpg — 建议 621 宽 — 后台 shell 展开后的紧凑实时进度流,体现"看得见但不烧 context"。 -->
-<img src="assets/shell.jpg" width="621" alt="后台 shell 的实时进度">
-
-**2. 用命令行**:
+Dispatching and resuming are the AI's job (`handoff run` / `handoff resume` under the hood). These two are for you — browse the list, watch the progress:
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-`ds-cli list` — 可滚动的历史任务 TUI,看 prompt 全文 / 结果,按 `G` 可用你配置的backend(deepseek claude) 打开这个会话
+**`handoff list`** — interactive TUI over your full task history. Read the full prompt, live status, and final result; press `G` on a row to reload that conversation and keep chatting.
 
 </td>
 <td width="50%" valign="top">
 
-`ds-cli tail <run-id>` — 实时跟踪某条 run 的输出流。
+**`handoff tail <run-id>`** — follow a task's output stream live, like looking over its shoulder.
 
 </td>
 </tr>
 <tr>
 <td valign="top">
 
-<!-- 替换为: assets/list-tui.jpg — 建议 ~480 宽 — curses 列表 + 详情视图,圈出 G/C 快捷键。 -->
-<img src="assets/list-tui.jpg" width="100%" alt="ds-cli list 交互式 TUI">
-<br>
-`ds-cli list` 里选中某条按 `G`,或直接 `ds-cli resume <seq>`,用 backend 把那次会话用 claude 重新加载,接着聊。也可以用 `ds-cli resume <seq> - <<'EOF' ... EOF` 把后续任务非交互派发到同一会话。
+<!-- assets/list-tui.jpg — ~480px wide — TUI list + detail view, highlight G/C shortcuts -->
+<img src="assets/list-tui.jpg" width="100%" alt="handoff list interactive TUI">
+
 </td>
 <td valign="top">
 
-<!-- 替换为: assets/tail.jpg — 建议 ~480 宽 — ds-cli tail 实时输出流。 -->
-<img src="assets/tail.jpg" width="100%" alt="ds-cli tail 实时跟踪">
+<!-- assets/tail.jpg — ~480px wide — handoff tail live stream -->
+<img src="assets/tail.jpg" width="100%" alt="handoff tail live follow">
 
 </td>
 </tr>
 </table>
 
+Inside Claude Code there's also a zero-cost option: expand the background shell and the live progress stream is right there — rendered in the shell view, never burning your main session's context.
+
 <details>
-<summary><b>并行派发多个任务</b></summary>
+<summary><b>Dispatching tasks in parallel</b></summary>
 
 <br>
 
-在同一条消息里发出多个后台任务,各自独立完成、独立通知。ds-cli 自动递增 run 的 seq,互不干扰。
+Have your agent fire off several tasks in a single message; each runs and completes independently. handoff auto-increments run numbers so they never collide.
 
-<!-- 替换为: assets/parallel.jpg — 建议 621 宽 — 同一条消息派发 2~3 个后台任务,各自拿到不同 RESULT= 路径。 -->
-<img src="assets/parallel.jpg" width="621" alt="并行派发多任务">
+<!-- assets/parallel.jpg — ~621px wide — 2–3 background tasks from one message, each with its own RESULT= path -->
+<img src="assets/parallel.jpg" width="621" alt="Parallel dispatch">
 
 </details>
 
----
+## How it works
 
-## 安装
+1. Your agent hands the whole task to handoff, which runs it **in the background** — your session never blocks.
+2. handoff launches the matching CLI (`claude -p` / `codex exec`) in an isolated context and streams the full output to disk.
+3. The main session receives exactly one line: `RESULT=<path-to-result-file>`. Progress goes to the background shell view and `.out.txt` — **never** into your main context.
+4. On completion the agent gets notified, reads `.result.md`, and reports back to you.
+5. The `RESULT=` path encodes the run_id (e.g. `hd-0611-03`) — a stable handle for resuming: every follow-up round points at the same conversation.
 
-### Homebrew（推荐）
+<details>
+<summary><b>Why it pays off: the math</b></summary>
 
-```bash
-brew install dazuiba/tap/ds-cli
-```
+<br>
 
-装好后运行 `ds-cli install` 初始化配置,再编辑 `~/.ds-cli/config.yaml` 填入你的 token:
+For **transactional work** — writing code, running tests — DeepSeek V4 holds its own against Sonnet-class models at a fraction of the price. What's genuinely scarce, and worth a subscription, is the judgment of the one or two models at the very top (Opus / GPT-5.5).
 
-```yaml
-default_backend: default
-fast_backend: default
-backends:
-  default:
-    env:
-      ANTHROPIC_AUTH_TOKEN: "sk-your-token"   # 默认走 https://api.deepseek.com/anthropic
-```
+| Option | Relative cost for the same work |
+| --- | --- |
+| Claude Sonnet | 1× (baseline) |
+| DeepSeek official API | **1/3** |
+| [OpenCode Go](https://opencode.ai/go?ref=D5926WCTD8) (includes DeepSeek V4) | **1/18** |
 
-### 在线安装
+Let the flagship model communicate, decompose, and review; hand all execution off. A $20 subscription directing $5 of compute gets you ~$200 worth of work.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/dazuiba/ds-cli/main/install-online.sh | bash
-```
+</details>
 
-需要 Python 3.9+ 和 git。安装脚本会把 ds-cli 链接到 Claude Code、Codex 和 shell 各自查找的位置:
+## Configuration
 
-```text
-~/bin/ds-cli                       -> <checkout>/ds-cli            # 命令入口
-~/.codex/agents/ds-agent.toml      -> <checkout>/ds-agent.toml     # Codex subagent
-~/.claude/skills/ds-cli/SKILL.md   -> <checkout>/SKILL.md          # Claude Code skill
-```
-
-装好后编辑 `~/.ds-cli/config.yaml` 填入你的 token,最小配置:
+Three targets are built in and work out of the box; the minimal config is just a DeepSeek token:
 
 ```yaml
-default_backend: default
-fast_backend: default
+# ~/.handoff/config.yaml — or set DEEPSEEK_API_KEY and leave this file empty
 backends:
-  default:
+  deepseek:
     env:
-      ANTHROPIC_AUTH_TOKEN: "sk-your-token"   # 默认走 https://api.deepseek.com/anthropic
+      ANTHROPIC_AUTH_TOKEN: "sk-..."
 ```
 
-完整配置(本地 OpenCode proxy、模型/system prompt 覆盖、全部可覆盖字段)见 **[配置文档 →](docs/configuration.zh-CN.md)**。
+Want another Anthropic-compatible endpoint? Add a custom target:
 
-> 想自己 clone?`git clone` 仓库后执行 `./ds-cli install`,前提是系统有 `uv`。
+```yaml
+backends:
+  kimi:
+    type: claude
+    model: kimi-k3
+    env:
+      ANTHROPIC_BASE_URL: https://api.moonshot.cn/anthropic
+      ANTHROPIC_AUTH_TOKEN: "${MOONSHOT_API_KEY}"
+```
 
-## 更新
+Merge semantics and every overridable field: **[configuration docs →](docs/configuration.zh-CN.md)**.
 
-- **Homebrew 安装**: `brew upgrade dazuiba/tap/ds-cli`
-- **源码安装**: `ds-cli update`（拉取最新源码到 checkout,并刷新链接）
+## More
 
-## 更多
-
-- **[命令参考 →](docs/cli-reference.zh-CN.md)** — `run` / `list` / `resume` / `tail` / `install` / `update` 全部用法,run id 编码与落盘文件布局。
-- **[配置文档 →](docs/configuration.zh-CN.md)** — backend 合并机制、OpenCode proxy、可覆盖字段全表。
+- **[CLI reference →](docs/cli-reference.zh-CN.md)** — full usage of `run` / `resume` / `list` / `tail` / `init`, run-id encoding, on-disk file layout.
+- **[Configuration →](docs/configuration.zh-CN.md)** — type_defaults merging, custom targets, `${ENV}` interpolation.
+- **[Design notes →](docs/design.zh-CN.md)** — why Claude Code uses background shells while Codex uses a subagent; the RESULT= protocol.
