@@ -28,6 +28,7 @@ Placeholder substitution:
 from __future__ import annotations
 
 import os
+import shlex
 import sys
 from typing import Optional
 
@@ -80,6 +81,26 @@ _CLAUDE_HERMETIC_VARS = (
 )
 
 
+def resolved_backend_env(backend: dict, model: str, pro_model: str = "") -> tuple[list[str], dict[str, str]]:
+    """Return env vars cleared and set for this backend after placeholder expansion."""
+    ctx = _base_ctx(backend, model=model, pro_model=pro_model)
+    unset_keys = list(_CLAUDE_HERMETIC_VARS) if backend_type(backend) == "claude" else []
+
+    resolved_env: dict[str, str] = {}
+    env_map = backend.get("env", {})
+    for key, val in env_map.items():
+        resolved = _resolve_env_val(val, ctx)
+        if resolved == "":
+            continue
+        resolved_env[key] = str(resolved)
+
+    if backend_type(backend) == "claude" and "CLAUDE_CONFIG_DIR" not in resolved_env:
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+        resolved_env["CLAUDE_CONFIG_DIR"] = config_dir
+
+    return unset_keys, resolved_env
+
+
 def set_backend_env(backend: dict, model: str, pro_model: str = ""):
     """Set environment variables for the backend CLI.
 
@@ -88,26 +109,22 @@ def set_backend_env(backend: dict, model: str, pro_model: str = ""):
     known ANTHROPIC_*/model vars are cleared first, so only the backend's own
     env block takes effect.
     """
-    ctx = _base_ctx(backend, model=model, pro_model=pro_model)
+    unset_keys, resolved_env = resolved_backend_env(backend, model, pro_model)
 
-    if backend_type(backend) == "claude":
-        for key in _CLAUDE_HERMETIC_VARS:
-            os.environ.pop(key, None)
+    for key in unset_keys:
+        os.environ.pop(key, None)
 
-    env_map = backend.get("env", {})
-    for key, val in env_map.items():
-        resolved = _resolve_env_val(val, ctx)
-        # an empty value (e.g. a model-less legacy backend resolving
-        # ANTHROPIC_MODEL="{model}") must not be exported — an empty env var
-        # breaks the CLI where an unset one would not
-        if resolved == "":
-            continue
-        os.environ[key] = resolved
+    for key, value in resolved_env.items():
+        os.environ[key] = value
 
-    # claude needs a config dir; codex backends have no ANTHROPIC_*/CLAUDE_* env
-    if backend_type(backend) == "claude":
-        if not os.environ.get("CLAUDE_CONFIG_DIR"):
-            os.environ["CLAUDE_CONFIG_DIR"] = os.path.expanduser("~/.claude")
+
+def format_shell_command(cwd: str, cmd: list[str], unset_keys: list[str], set_env: dict[str, str]) -> str:
+    """Render a shell command that reproduces the backend invocation."""
+    parts = [f"cd {shlex.quote(cwd)}", "&&", "env"]
+    parts.extend(f"-u {shlex.quote(key)}" for key in unset_keys)
+    parts.extend(f"{key}={shlex.quote(value)}" for key, value in set_env.items())
+    parts.extend(shlex.quote(arg) for arg in cmd)
+    return " ".join(parts)
 
 
 def build_args(

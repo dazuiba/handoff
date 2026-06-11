@@ -15,6 +15,8 @@ from ..backend import (
     build_args,
     backend_type,
     ensure_backend_token_ready,
+    format_shell_command,
+    resolved_backend_env,
     resolve_backend_model,
     wrap_with_pty,
 )
@@ -38,7 +40,11 @@ def _is_adopted_path(input_src: str) -> bool:
 
 
 def cmd_run(argv: list[str], config: Config):
-    """handoff run [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <prompt...>)."""
+    """handoff run [--backend <name>] [--cwd <dir>] [--pro] [--verbose] (<input-file|-> | --text <prompt...>)."""
+    # Pre-scan --verbose so it works regardless of position (e.g. after --text).
+    verbose = "--verbose" in argv
+    filtered = [a for a in argv if a != "--verbose"]
+
     pro = False
     cwd = ""
     backend_arg = ""
@@ -47,22 +53,22 @@ def cmd_run(argv: list[str], config: Config):
     text_parts = []
 
     i = 0
-    while i < len(argv):
-        a = argv[i]
+    while i < len(filtered):
+        a = filtered[i]
         if a == "-":
             input_src = "-"
         elif a == "--cwd":
             i += 1
-            if i >= len(argv):
+            if i >= len(filtered):
                 print("handoff run: --cwd requires a value", file=sys.stderr)
                 sys.exit(2)
-            cwd = argv[i]
+            cwd = filtered[i]
         elif a == "--backend":
             i += 1
-            if i >= len(argv):
+            if i >= len(filtered):
                 print("handoff run: --backend requires a value", file=sys.stderr)
                 sys.exit(2)
-            backend_arg = argv[i]
+            backend_arg = filtered[i]
         elif a.startswith("--backend="):
             backend_arg = a.split("=", 1)[1]
         elif a == "--text":
@@ -70,13 +76,13 @@ def cmd_run(argv: list[str], config: Config):
             if input_src:
                 print("handoff run: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
-            if i + 1 >= len(argv):
+            if i + 1 >= len(filtered):
                 print("handoff run: --text requires a value", file=sys.stderr)
                 sys.exit(2)
-            if argv[i + 1] == "--":
-                text_parts.extend(argv[i + 2:])
+            if filtered[i + 1] == "--":
+                text_parts.extend(filtered[i + 2:])
             else:
-                text_parts.extend(argv[i + 1:])
+                text_parts.extend(filtered[i + 1:])
             break
         elif a.startswith("--text="):
             text_mode = True
@@ -84,7 +90,7 @@ def cmd_run(argv: list[str], config: Config):
                 print("handoff run: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             text_parts.append(a.split("=", 1)[1])
-            text_parts.extend(argv[i + 1:])
+            text_parts.extend(filtered[i + 1:])
             break
         elif a == "--pro":
             pro = True
@@ -94,8 +100,8 @@ def cmd_run(argv: list[str], config: Config):
             sys.exit(0)
         elif a == "--":
             i += 1
-            if i < len(argv):
-                input_src = argv[i]
+            if i < len(filtered):
+                input_src = filtered[i]
             break
         elif a.startswith("-"):
             print(f"handoff run: unknown option {a}", file=sys.stderr)
@@ -165,7 +171,7 @@ def cmd_run(argv: list[str], config: Config):
 
     backend_name = backend_arg or config.default_backend
 
-    _execute(cwd, prompt_text, backend_name, pro, config, slug=slug, adopted_run_id=adopted_run_id)
+    _execute(cwd, prompt_text, backend_name, pro, config, slug=slug, adopted_run_id=adopted_run_id, verbose=verbose)
 
 
 def _execute(
@@ -177,6 +183,7 @@ def _execute(
     resume_session_id: str | None = None,
     slug: str = "task",
     adopted_run_id: str | None = None,
+    verbose: bool = False,
 ):
     """Shared execution path for file, stdin, and --text run modes.
 
@@ -272,6 +279,10 @@ def _execute(
         cwd=cwd,
     )
     cmd = wrap_with_pty(backend_cfg, backend_cmd)
+
+    if verbose:
+        unset_keys, set_env = resolved_backend_env(backend_cfg, model, backend_cfg.get("pro_model", ""))
+        print(f"CMD: {format_shell_command(cwd, cmd, unset_keys, set_env)}", file=sys.stderr, flush=True)
 
     execute_run(
         cwd,

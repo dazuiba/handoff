@@ -14,16 +14,25 @@ the original seq stays a stable handle — keep using it to add more turns.
 
 import os
 import sys
-import shlex
 
-from ..core import get_db, find_run, short_path, row_value
-from ..backend import set_backend_env, build_resume_args, resolve_backend_model
+from ..core import get_db, find_run, row_value
+from ..backend import (
+    build_resume_args,
+    format_shell_command,
+    resolved_backend_env,
+    resolve_backend_model,
+    set_backend_env,
+)
 from ..config import Config
 
 
 def cmd_resume(argv: list[str], config: Config):
     """handoff resume [<run-id|seq>] [--backend <name>] [--pro] [--cwd <dir>]
-    [(<input-file|-> | --text <prompt...>)]."""
+    [--verbose] [(<input-file|-> | --text <prompt...>)]."""
+    # Pre-scan --verbose so it works regardless of position (e.g. after --text).
+    verbose = "--verbose" in argv
+    filtered = [a for a in argv if a != "--verbose"]
+
     pro = False
     cwd = ""
     backend_arg = ""
@@ -34,22 +43,22 @@ def cmd_resume(argv: list[str], config: Config):
     have_selector = False
 
     i = 0
-    while i < len(argv):
-        a = argv[i]
+    while i < len(filtered):
+        a = filtered[i]
         if a == "-":
             input_src = "-"
         elif a == "--cwd":
             i += 1
-            if i >= len(argv):
+            if i >= len(filtered):
                 print("handoff resume: --cwd requires a value", file=sys.stderr)
                 sys.exit(2)
-            cwd = argv[i]
+            cwd = filtered[i]
         elif a == "--backend":
             i += 1
-            if i >= len(argv):
+            if i >= len(filtered):
                 print("handoff resume: --backend requires a value", file=sys.stderr)
                 sys.exit(2)
-            backend_arg = argv[i]
+            backend_arg = filtered[i]
         elif a.startswith("--backend="):
             backend_arg = a.split("=", 1)[1]
         elif a == "--text":
@@ -57,13 +66,13 @@ def cmd_resume(argv: list[str], config: Config):
             if input_src:
                 print("handoff resume: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
-            if i + 1 >= len(argv):
+            if i + 1 >= len(filtered):
                 print("handoff resume: --text requires a value", file=sys.stderr)
                 sys.exit(2)
-            if argv[i + 1] == "--":
-                text_parts.extend(argv[i + 2:])
+            if filtered[i + 1] == "--":
+                text_parts.extend(filtered[i + 2:])
             else:
-                text_parts.extend(argv[i + 1:])
+                text_parts.extend(filtered[i + 1:])
             break
         elif a.startswith("--text="):
             text_mode = True
@@ -71,7 +80,7 @@ def cmd_resume(argv: list[str], config: Config):
                 print("handoff resume: --text cannot be combined with an input file", file=sys.stderr)
                 sys.exit(2)
             text_parts.append(a.split("=", 1)[1])
-            text_parts.extend(argv[i + 1:])
+            text_parts.extend(filtered[i + 1:])
             break
         elif a == "--pro":
             pro = True
@@ -145,15 +154,15 @@ def cmd_resume(argv: list[str], config: Config):
     if prompt_text is None:
         # Interactive: reopen the conversation in claude (replaces this process).
         conn.close()
-        _resume_interactive(config, backend_name, session_id, cwd, pro)
+        _resume_interactive(config, backend_name, session_id, cwd, pro, verbose=verbose)
     else:
         # Non-interactive: dispatch a new turn through the run pipeline.
         conn.close()
         from .run import _execute
-        _execute(cwd, prompt_text, backend_name, pro, config, resume_session_id=session_id)
+        _execute(cwd, prompt_text, backend_name, pro, config, resume_session_id=session_id, verbose=verbose)
 
 
-def _resume_interactive(config: Config, backend_name: str, session_id: str, cwd: str, pro: bool):
+def _resume_interactive(config: Config, backend_name: str, session_id: str, cwd: str, pro: bool, verbose: bool = False):
     backend_cfg = config.get_backend(backend_name)
     if not backend_cfg:
         print(
@@ -174,6 +183,8 @@ def _resume_interactive(config: Config, backend_name: str, session_id: str, cwd:
         pro_model=backend_cfg.get("pro_model", ""),
     )
 
-    print(f"cd {short_path(cwd)}; {' '.join(shlex.quote(p) for p in args)}", file=sys.stderr)
+    if verbose:
+        unset_keys, set_env = resolved_backend_env(backend_cfg, model, backend_cfg.get("pro_model", ""))
+        print(f"CMD: {format_shell_command(cwd, args, unset_keys, set_env)}", file=sys.stderr, flush=True)
     os.chdir(cwd)
     os.execvp(args[0], args)

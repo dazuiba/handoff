@@ -14,8 +14,8 @@ def usage(config=None):
   handoff init      [-y|--yes]
   handoff new       --backend <name> [--slug <slug>]
   handoff list|ls   [--uuid] [--cwd]
-  handoff run       [--backend <name>] [--cwd <dir>] [--pro] (<input-file|-> | --text <prompt...>)
-  handoff resume    [<run-id|seq>] [--pro] [--cwd <dir>] [(<input-file|-> | --text <prompt...>)]
+  handoff run       [--backend <name>] [--cwd <dir>] [--pro] [--verbose] (<input-file|-> | --text <prompt...>)
+  handoff resume    [<run-id|seq>] [--pro] [--cwd <dir>] [--verbose] [(<input-file|-> | --text <prompt...>)]
   handoff tail [<run-id|seq>]
 
   handoff env              — print config / data paths (works even with broken config)

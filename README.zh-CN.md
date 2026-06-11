@@ -1,12 +1,12 @@
 <div align="center">
 <img src="docs/assets/handoff-hero.jpg" width="100%" alt="hero">
 
-# 有了 **Handoff**，你的 coding agent 们终于可以互相协作了。
+# 有了 **Handoff**，你手里的几个 coding agent 终于可以互相协作了。
 
 
 
 
-| 从 | → 派给 | 为什么 |
+| coding agent | → 派给 | 为什么 |
 | :-- | :-- | :-- |
 | Claude Code / Codex | **DeepSeek** | 执行性工作又快又便宜，旗舰额度留给决策 |
 | DeepSeek | **Codex / Opus** | 难题借个脑子，答案带回当前会话 |
@@ -21,46 +21,71 @@
 
 如果你同时用着几家 coding agent，这些场景你一定眼熟：
 
-- 💸 **「Claude / Codex 订阅额度不经用」** — 你说：*「把上面 3 个任务，开 3 个 `/handoff-ds` 并行做」*。执行性工作 DeepSeek 干得又快又便宜，旗舰额度留给决策。
-- 🤔 **「DeepSeek 干活时卡住了，想听听 Codex 的意见」** — 你说：*「问问 `/handoff-codex` 的意见」*。不用开新终端、复述半天背景，答案带回当前会话。
-- 🔁 **「想接着上次派出去的活儿继续」** — 你说：*「接着刚才那个 `/handoff-ds` 的会话，继续做第 2 项」*。之前改过的文件、读过的代码、得出的结论全都还在。
-- 🔄 **「想换个模型干活，就得重开会话、重述一遍背景」** — 不用换。你始终留在熟悉的会话里，handoff 在中间转交任务、拿回结果。
+- 💸 **「Claude / Codex 订阅：$20 的量太少不经用，$100 的又太贵用不起」**<br>
+  — 只需一句：*「把这个任务交给 `/handoff-ds` 做」*。执行性工作 DeepSeek 干得又快又便宜，旗舰额度留给决策。
+- 🤔 **「DeepSeek 干活时卡住了，想听听 Codex 的意见」**<br>
+  — 只需一句：*「问问 `/handoff-codex` 的意见」*。不用开新终端、复述半天背景，答案带回当前会话。
+- 🔁 **「想接着上次派出去的活儿继续」**<br>
+  — 只需一句：*「接着刚才那个 `/handoff-ds` 的会话继续」*。之前改过的文件、读过的代码、得出的结论全都还在。
+- 🔄 **「想换个模型干活，就得重开会话、重述一遍背景」**<br>
+  — 不用换。你始终留在熟悉的会话里，handoff 在中间转交任务、拿回结果。
 
-这就是全部用户界面：**在你的 agent 会话里说一句话**。
+**算笔账就明白了**：写代码、跑测试这类事务性工作，DeepSeek V4 不输 Sonnet 级模型，价格只有零头。真正稀缺、值得付订阅费的，是顶端那一两个模型（Opus / GPT-5.5）的判断力。
+
+| 方案 | 相对单价（干同样的活） |
+| --- | --- |
+| Claude Sonnet | 1×（基准） |
+| DeepSeek 官方 API | **1/3** |
+| [OpenCode Go](https://opencode.ai/go?ref=D5926WCTD8)（含 DeepSeek V4） | **1/18** |
+
+旗舰模型负责沟通、拆解、验收；执行全部 handoff 出去——**$20 的订阅指挥 $5 的算力，干出 ~$200 的活**。这就是 handoff 的全部用法：在你的 agent 会话里说一句话。
 
 ## 快速开始
+
+### 1. 安装
 
 ```bash
 uv tool install handoff-cli
 handoff init        # 初始化配置，链接 skill / agent 文件
 ```
 
-填上 DeepSeek 的 token（二选一）：设置环境变量 `DEEPSEEK_API_KEY`，或写进 `~/.handoff/config.yaml`。
+更新：`uv tool upgrade handoff-cli`。
 
-然后回到 Claude Code，对它说：
+### 2. 配 token
 
-> 制定计划，让 `/handoff-ds` 执行上述任务。
+opus / codex 走你本机的 claude / codex 登录态，零配置；**只有 DeepSeek 需要填一个 token**。
+
+DeepSeek 算力推荐走 [OpenCode Go 套餐](https://opencode.ai/go?ref=D5926WCTD8)（单价最低，含 DeepSeek V4）。拿到 key 后，编辑 `~/.handoff/config.yaml`，只改 `ANTHROPIC_AUTH_TOKEN` 这一行：
+
+```yaml
+# ~/.handoff/config.yaml —— handoff init 帮你生成
+backends:
+  deepseek:                          # ← 第一个 = 默认
+    type: claude
+    model: deepseek-v4-flash
+    pro_model: "deepseek-v4-pro[1m]"
+    env:
+      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+      ANTHROPIC_AUTH_TOKEN: "sk-..."  # ← 改这里。本地代理设置见 https://github.com/iTzFaisal/oc-cc-proxy
+      ANTHROPIC_MODEL: "{model}"
+
+  opus:                              # 本机 claude 登录态，零配置
+    type: claude
+    ...
+  codex:                             # 本机 codex 登录态，零配置
+    type: codex
+    ...
+```
+
+### 3. 派第一个活
+
+回到 Claude Code，对它说：
+
+> 制定计划，交给 `/handoff-ds` 执行。
 
 任务进入后台执行，不阻塞你的会话；完成后 agent 自动读取结果、向你汇报。
 
-更新：`uv tool upgrade handoff-cli`。
-
-<details>
-<summary>没有 uv / 想从源码装？</summary>
-
-<br>
-
-`pipx install handoff-cli` 或 `pip install handoff-cli` 同样可用。源码安装：
-
-```bash
-git clone https://github.com/dazuiba/handoff && cd handoff
-uv tool install -e .
-handoff init
-```
-
-</details>
-
-## 可以把活儿派给谁
+### 4. 能派给谁
 
 | 你怎么说 | 从 | 派给 | 适合 |
 | --- | --- | --- | --- |
@@ -71,11 +96,18 @@ handoff init
 
 > Codex 里没有 slash 命令，所以那行是同名 subagent：说「让 `handoff-ds` 执行上述任务」即可。
 
-三个目标开箱即用：opus / codex 走你本机的登录态，零配置；deepseek 只需 token。底层分别是 `claude -p`（deepseek 走其 Anthropic 端点，opus 走本机登录态）和 `codex exec`。
+### 5. 盯进度 / 看历史
 
-## 任务派出去之后
+在 Claude Code 里展开那条后台 shell，实时进度流就在那里——走 shell view，不烧主会话上下文。想单独浏览历史、实时跟踪，用 `handoff list` 和 `handoff tail`（详见下方 FAQ）。
 
-派发和续接是 AI 的事（背后是 `handoff run` / `handoff resume`）；下面这些给你——看列表、盯进度：
+## FAQ
+
+<details>
+<summary><b>怎么看任务列表、盯某条任务的进度？</b></summary>
+
+<br>
+
+派发和续接是 AI 的事（背后是 `handoff run` / `handoff resume`）；下面这两个命令给你——看列表、盯进度：
 
 <table>
 <tr>
@@ -106,71 +138,41 @@ handoff init
 </tr>
 </table>
 
-在 Claude Code 里还有个零成本选项：展开那条后台 shell，实时进度流就在那里——走 shell view，不烧主会话上下文。
+</details>
 
 <details>
-<summary><b>并行派发多个任务</b></summary>
+<summary><b>能同时派发多个任务吗？</b></summary>
 
 <br>
 
-在同一条消息里让 agent 派出多个任务，各自独立执行、独立完成通知。handoff 自动递增 run 序号，互不干扰。
+可以。在同一条消息里让 agent 派出多个任务，各自独立执行、独立完成通知，互不干扰。
 
 <!-- docs/assets/parallel.jpg — 建议 621 宽 — 同一条消息派发 2~3 个后台任务，各自拿到不同 RESULT= 路径 -->
 <img src="docs/assets/parallel.jpg" width="621" alt="并行派发多任务">
 
 </details>
 
-## 它是怎么工作的
-
-1. 你的 agent 把任务整包交给 handoff，**后台执行**，会话不阻塞。
-2. handoff 在独立上下文里拉起对应的 CLI（`claude -p` / `codex exec`），完整输出流式落盘。
-3. 主会话只拿到一行 `RESULT=<结果文件路径>`；执行进度打在后台 shell view 和 `.out.txt`，**不进**主会话上下文。
-4. 完成后 agent 收到通知，读取 `.result.md`，向你汇报。
-5. `RESULT=` 路径里编码着 run_id（如 `hd-0611-03`）——它是续接的稳定句柄，多轮续接始终指向同一个会话。
-
 <details>
-<summary><b>为什么值得：一笔账</b></summary>
+<summary><b>没有 uv / 想从源码装？</b></summary>
 
 <br>
 
-在写代码、跑测试这类**事务性工作**上，DeepSeek V4 不输 Sonnet 级模型，价格只有零头。真正稀缺、值得为之付订阅费的，是顶端那一两个模型（Opus / GPT-5.5）的判断力。
+`pipx install handoff-cli` 或 `pip install handoff-cli` 同样可用。源码安装：
 
-| 方案 | 相对单价（干同样的活） |
-| --- | --- |
-| Claude Sonnet | 1×（基准） |
-| DeepSeek 官方 API | **1/3** |
-| [OpenCode Go](https://opencode.ai/go?ref=D5926WCTD8)（含 DeepSeek V4） | **1/18** |
-
-旗舰模型负责沟通、拆解、验收；执行全部 handoff 出去。$20 的订阅指挥 $5 的算力，干出 ~$200 的活。
+```bash
+git clone https://github.com/dazuiba/handoff && cd handoff
+uv tool install -e .
+handoff init
+```
 
 </details>
 
-## 配置
+<details>
+<summary><b>怎么加一个自定义后端 / env 块怎么写？</b></summary>
 
-`handoff init` 生成一份完整的 `~/.handoff/config.yaml`——三个目标，开箱即用。第一个是默认目标。只有 DeepSeek 需要填 token；opus 和 codex 走本机登录态，零配置。
+<br>
 
-```yaml
-# ~/.handoff/config.yaml —— handoff init 帮你生成
-backends:
-  deepseek:                          # ← 第一个 = 默认
-    type: claude
-    model: deepseek-v4-flash
-    pro_model: "deepseek-v4-pro[1m]"
-    env:
-      ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
-      ANTHROPIC_AUTH_TOKEN: "${DEEPSEEK_API_KEY}"   # 设环境变量，或直接写 sk-...
-      ANTHROPIC_MODEL: "{model}"
-
-  opus:                              # 本机 claude 登录态，零配置
-    type: claude
-    ...
-
-  codex:                             # 本机 codex 登录态，零配置
-    type: codex
-    ...
-```
-
-想接入其他 anthropic 兼容端点？在 `backends` 下加一段即可：
+`backends` 下再加一项即可，任何 Anthropic 兼容端点都行：
 
 ```yaml
 backends:
@@ -183,12 +185,25 @@ backends:
       ANTHROPIC_MODEL: "{model}"
 ```
 
-env 块全由你书写——你设的每个 key=value 都会在拉起 CLI 前导出为环境变量。`{model}` 替换为解析出的模型名，`${ENV_VAR}` 从当前 shell 展开。
+env 块完全由你定义——你设的每个 key=value 都会在拉起 CLI 前导出为环境变量。`{model}` 替换为解析出的模型名，`${ENV_VAR}` 从当前 shell 展开。运行 `handoff env` 看各路径在哪。完整细节见 **[配置文档 →](docs/configuration.zh-CN.md)**。
 
-运行 `handoff env` 看一下各路径在哪。完整细节见 **[配置文档 →](docs/configuration.zh-CN.md)**。
+</details>
 
-## 更多
+<details>
+<summary><b>它到底是怎么工作的？</b></summary>
+
+<br>
+
+1. 你的 agent 把任务整包交给 handoff，**后台执行**，会话不阻塞。
+2. handoff 在独立上下文里拉起对应的 CLI（`claude -p` / `codex exec`），完整输出流式落盘。
+3. 主会话只拿到一行 `RESULT=<结果文件路径>`；执行进度打在后台 shell view，**不进**主会话上下文。
+4. 完成后 agent 收到通知，读取结果文件，向你汇报。
+5. `RESULT=` 路径同时是这个会话的稳定句柄——之后每轮续接都指向同一个会话。
+
+</details>
+
+**更多文档**
 
 - **[命令参考 →](docs/cli-reference.zh-CN.md)** — `run` / `resume` / `list` / `tail` / `env` / `init` 全部用法，run id 编码与落盘文件布局。
-- **[配置文档 →](docs/configuration.zh-CN.md)** — 机制与数据两层、env 块、`${ENV}` 插值、include、自定义目标。
+- **[配置文档 →](docs/configuration.zh-CN.md)** — 机制与数据两层、env 块、`${ENV}` 插值、include、自定义后端。
 - **[设计说明 →](docs/design.zh-CN.md)** — 为什么 Claude Code 用后台 shell、Codex 用 subagent；RESULT= 协议细节。
