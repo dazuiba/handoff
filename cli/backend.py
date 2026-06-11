@@ -63,13 +63,36 @@ def backend_type(backend: dict) -> str:
     return backend.get("type", "claude")
 
 
+# Inherited values of these would silently redirect a claude-type backend to
+# whatever endpoint/model the *calling* session uses. handoff is routinely
+# invoked from inside another claude session (e.g. dispatching opus from a
+# DeepSeek-proxied session), so that environment is always polluted — a
+# claude-type run must see only what its backend declares.
+_CLAUDE_HERMETIC_VARS = (
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+)
+
+
 def set_backend_env(backend: dict, model: str, pro_model: str = ""):
     """Set environment variables for the backend CLI.
 
     Iterates the backend's 'env' mapping, substitutes placeholders,
-    and sets each key=value in os.environ.
+    and sets each key=value in os.environ. claude-type backends are hermetic:
+    known ANTHROPIC_*/model vars are cleared first, so only the backend's own
+    env block takes effect.
     """
     ctx = _base_ctx(backend, model=model, pro_model=pro_model)
+
+    if backend_type(backend) == "claude":
+        for key in _CLAUDE_HERMETIC_VARS:
+            os.environ.pop(key, None)
 
     env_map = backend.get("env", {})
     for key, val in env_map.items():

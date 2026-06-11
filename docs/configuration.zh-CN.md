@@ -61,6 +61,11 @@ backends:
 
 字符串值里的 `${ENV_VAR}` 在合并后统一展开。未设置的环境变量展开为空字符串。
 
+`type: claude` 的 backend 是**环境密闭**的：启动前会先清除继承自外层 shell 的
+`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` 等已知变量，再应用你
+`env` 块里声明的值——只有写在配置里的才生效。这保证了从一个连着别家端点的会话里
+派发任务（比如在 DeepSeek 会话里咨询 opus）不会被外层环境劫持。
+
 ## 自定义 backend
 
 ### Anthropic 兼容端点
