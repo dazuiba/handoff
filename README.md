@@ -4,9 +4,9 @@
 # With **Handoff**, your coding agents can finally work together.
 
 
-| coding agent | → Hand off to | Why |
+| You're in | Hand off to | Why |
 | :-- | :-- | :-- |
-| Claude Code / Codex | **DeepSeek** | Execution work is fast and cheap; save the expensive quota for decisions |
+| Claude Code / Codex | **DeepSeek** | It does the simple work fast and cheap; save the expensive quota for decisions |
 | DeepSeek | **Codex / Opus** | Borrow a brain for hard problems, bring the answer back to your session |
 
 No tool-switching, no lost context.
@@ -23,22 +23,23 @@ If you use more than one coding agent, these will sound familiar:
   — Just say: *"Give this task to `/handoff-ds`."* DeepSeek does the work fast and cheap. Save your expensive quota for decisions.
 - 🤔 **"DeepSeek is stuck. I want a second opinion from Codex."**<br>
   — Just say: *"Ask `/handoff-codex` what it thinks."* No new terminal. No re-explaining. The answer comes back to your current session.
-- 🔁 **"I want to continue that task from before."**<br>
-  — Just say: *"Resume that `/handoff-ds` session."* Everything is still there: the files it changed, the code it read, what it concluded.
-- 🔄 **"A new model means a new session. I have to explain everything again."**<br>
-  — Don't switch. Stay in your session. handoff passes the task over, then brings the result back.
+- 🔁 **"`/handoff-ds` finished that task. Now I have a follow-up task for it."**<br>
+  — Just say: *"Resume the last `/handoff-ds` session, then do X."* It just sends one more message in the old conversation — all the old context is still there.
 
-**Do the math:** for transactional work — writing code, running tests — DeepSeek V4 matches Sonnet-class models at a fraction of the price. What is really scarce, and worth a subscription, is the judgment of the one or two models at the very top (Opus / GPT-5.5).
+
+**The math is simple:** DeepSeek V4 is as capable as Sonnet, and on [OpenCode Go](https://opencode.ai/go?ref=D5926WCTD8) the same money buys **18× the work**:
 
 | Option | Relative cost for the same work |
 | --- | --- |
-| Claude Sonnet | 1× (baseline) |
+| Claude Sonnet (subscription) | 1× (baseline) |
 | DeepSeek official API | **1/3** |
 | [OpenCode Go](https://opencode.ai/go?ref=D5926WCTD8) (includes DeepSeek V4) | **1/18** |
 
-Let the top model talk to you, split the work, and review; hand all execution off — **a $20 subscription directing $5 of compute gets you ~$200 worth of work.** That's all there is to it: one sentence inside your agent session.
+So: **only pay for the SOTA model** (Opus / GPT-5.5) — use it to plan and review. Everything else goes to DeepSeek. With handoff, **$20 Claude Code (plan + dispatch) + $5 OpenCode Go (execution) ≈ the work of a $200 Claude Code Max.**
 
 ## Quick start
+
+> **Before you start:** handoff works inside Claude Code (CLI or desktop app) or Codex. You need at least one of them installed and logged in.
 
 ### 1. Install
 
@@ -51,9 +52,9 @@ Upgrade with `uv tool upgrade handoff-cli`.
 
 ### 2. Set your token
 
-opus / codex reuse your local claude / codex logins — zero config. **Only DeepSeek needs a token.**
+The `opus` and `codex` backends reuse your existing Claude Code / Codex logins — zero config. **Only DeepSeek needs a token.**
 
-For DeepSeek compute we recommend the [OpenCode Go plan](https://opencode.ai/go?ref=D5926WCTD8) (lowest cost, includes DeepSeek V4). Once you have a key, edit `~/.handoff/config.yaml` and change just the `ANTHROPIC_AUTH_TOKEN` line:
+For DeepSeek, we recommend the [OpenCode Go plan](https://opencode.ai/go?ref=D5926WCTD8) (lowest cost, includes DeepSeek V4). Once you have a key, edit `~/.handoff/config.yaml` and change just the `ANTHROPIC_AUTH_TOKEN` line:
 
 ```yaml
 # ~/.handoff/config.yaml — handoff init generates this for you
@@ -92,11 +93,11 @@ The task runs in the background; your session is never blocked. When it finishes
 | `/handoff-codex` | Claude Code | Codex (GPT-5.5) | Heavy reasoning, second opinions, hard bugs |
 | `/handoff-opus` | Claude Code | Claude Opus | Decisions that deserve the top model |
 
-> Codex has no slash commands, so that row is the subagent of the same name — say "have `handoff-ds` execute the task above."
+> Codex has no slash commands — from Codex you invoke the subagent of the same name instead: say "have `handoff-ds` execute the task above."
 
 ### 5. Watch progress / browse history
 
-Inside Claude Code, expand the background shell and the live progress is right there — it renders in the shell view and uses none of your main session's context. To browse history or follow a task on its own, use `handoff list` and `handoff tail` (see the FAQ below).
+Inside Claude Code, expand the background shell and you'll see live progress right there — it renders in the shell view and uses none of your main session's context. To browse history or follow a task on its own, use `handoff list` and `handoff tail` (see the FAQ below).
 
 ## FAQ
 
