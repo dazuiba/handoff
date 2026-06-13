@@ -27,7 +27,7 @@ from ..config import Config
 
 
 def cmd_resume(argv: list[str], config: Config):
-    """handoff resume [<run-id|seq>] [--backend <name>] [--pro] [--cwd <dir>]
+    """handoff resume [<run-id|seq>] [--backend <name>] [--slug <slug>] [--pro] [--cwd <dir>]
     [--verbose] [(<input-file|-> | --text <prompt...>)]."""
     # Pre-scan --verbose so it works regardless of position (e.g. after --text).
     verbose = "--verbose" in argv
@@ -36,6 +36,7 @@ def cmd_resume(argv: list[str], config: Config):
     pro = False
     cwd = ""
     backend_arg = ""
+    slug_arg = ""
     selector = ""
     input_src = ""
     text_mode = False
@@ -61,6 +62,14 @@ def cmd_resume(argv: list[str], config: Config):
             backend_arg = filtered[i]
         elif a.startswith("--backend="):
             backend_arg = a.split("=", 1)[1]
+        elif a == "--slug":
+            i += 1
+            if i >= len(filtered):
+                print("handoff resume: --slug requires a value", file=sys.stderr)
+                sys.exit(2)
+            slug_arg = filtered[i]
+        elif a.startswith("--slug="):
+            slug_arg = a.split("=", 1)[1]
         elif a == "--text":
             text_mode = True
             if input_src:
@@ -159,7 +168,16 @@ def cmd_resume(argv: list[str], config: Config):
         # Non-interactive: dispatch a new turn through the run pipeline.
         conn.close()
         from .run import _execute
-        _execute(cwd, prompt_text, backend_name, pro, config, resume_session_id=session_id, verbose=verbose)
+        _execute(
+            cwd,
+            prompt_text,
+            backend_name,
+            pro,
+            config,
+            resume_session_id=session_id,
+            slug=slug_arg or "resume",
+            verbose=verbose,
+        )
 
 
 def _resume_interactive(config: Config, backend_name: str, session_id: str, cwd: str, pro: bool, verbose: bool = False):

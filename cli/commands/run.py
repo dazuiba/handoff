@@ -40,7 +40,7 @@ def _is_adopted_path(input_src: str) -> bool:
 
 
 def cmd_run(argv: list[str], config: Config):
-    """handoff run [--backend <name>] [--cwd <dir>] [--pro] [--verbose] (<input-file|-> | --text <prompt...>)."""
+    """handoff run [--backend <name>] [--cwd <dir>] [--slug <slug>] [--pro] [--verbose] (<input-file|-> | --text <prompt...>)."""
     # Pre-scan --verbose so it works regardless of position (e.g. after --text).
     verbose = "--verbose" in argv
     filtered = [a for a in argv if a != "--verbose"]
@@ -48,6 +48,7 @@ def cmd_run(argv: list[str], config: Config):
     pro = False
     cwd = ""
     backend_arg = ""
+    slug_arg = ""
     input_src = ""
     text_mode = False
     text_parts = []
@@ -71,6 +72,14 @@ def cmd_run(argv: list[str], config: Config):
             backend_arg = filtered[i]
         elif a.startswith("--backend="):
             backend_arg = a.split("=", 1)[1]
+        elif a == "--slug":
+            i += 1
+            if i >= len(filtered):
+                print("handoff run: --slug requires a value", file=sys.stderr)
+                sys.exit(2)
+            slug_arg = filtered[i]
+        elif a.startswith("--slug="):
+            slug_arg = a.split("=", 1)[1]
         elif a == "--text":
             text_mode = True
             if input_src:
@@ -130,10 +139,10 @@ def cmd_run(argv: list[str], config: Config):
         if not prompt_text:
             print("handoff run: --text requires a non-empty value", file=sys.stderr)
             sys.exit(2)
-        slug = "from-text"
+        slug = slug_arg or "from-text"
     elif input_src == "-" or (not input_src and not sys.stdin.isatty()):
         prompt_text = sys.stdin.read()
-        slug = "from-stdin"
+        slug = slug_arg or "from-stdin"
     elif input_src:
         if not os.path.isfile(input_src):
             print(f"handoff run: input file not found: {input_src}", file=sys.stderr)
@@ -164,7 +173,7 @@ def cmd_run(argv: list[str], config: Config):
         else:
             with open(input_src) as f:
                 prompt_text = f.read()
-            slug = "from-file"
+            slug = slug_arg or "from-file"
     else:
         print("handoff run: input file required, or use --text <prompt...> / pipe via '-'", file=sys.stderr)
         sys.exit(2)

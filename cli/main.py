@@ -12,10 +12,10 @@ def usage(config=None):
   handoff --help
   handoff env
   handoff init      [-y|--yes]
-  handoff new       --backend <name> [--slug <slug>]
+  handoff new       --backend <name> [--slug <slug>] [--write]
   handoff list|ls   [--uuid] [--cwd]
-  handoff run       [--backend <name>] [--cwd <dir>] [--pro] [--verbose] (<input-file|-> | --text <prompt...>)
-  handoff resume    [<run-id|seq>] [--pro] [--cwd <dir>] [--verbose] [(<input-file|-> | --text <prompt...>)]
+  handoff run       [--backend <name>] [--cwd <dir>] [--slug <slug>] [--pro] [--verbose] (<input-file|-> | --text <prompt...>)
+  handoff resume    [<run-id|seq>] [--slug <slug>] [--pro] [--cwd <dir>] [--verbose] [(<input-file|-> | --text <prompt...>)]
   handoff tail [<run-id|seq>]
 
   handoff env              — print config / data paths (works even with broken config)
@@ -29,6 +29,8 @@ def usage(config=None):
 Run ids: <mmdd>-<backend2>-<SEQ_CODE>-<slug>  (e.g. 0611-ds-03-fix-auth)
 --cwd defaults to the current directory of the calling process.
 --backend picks a backend (default: first entry in config.yaml backends).
+--slug sets the semantic suffix in generated run ids.
+--write on `handoff new` writes stdin to the pre-allocated .prompt.md file.
 --pro uses the backend's pro_model. A resume stays on its original backend."""
     )
 

@@ -4,9 +4,10 @@ Pre-allocates a run_id and returns the canonical .prompt.md path so the caller
 can write the prompt directly to its final archive location before dispatching.
 
 Usage:
-  handoff new --backend <name> [--slug <slug>]
+  handoff new --backend <name> [--slug <slug>] [--write]
 
-Stdout: one line — absolute path to the .prompt.md file (file is NOT created).
+Stdout: one line — absolute path to the .prompt.md file.
+By default the file is not created. With --write, stdin is written to the file.
 """
 
 from __future__ import annotations
@@ -26,9 +27,10 @@ from ..config import Config
 
 
 def cmd_new(argv: list[str], config: Config):
-    """handoff new --backend <name> [--slug <slug>]"""
+    """handoff new --backend <name> [--slug <slug>] [--write]"""
     backend_arg = ""
     slug_arg = ""
+    write_prompt = False
 
     i = 0
     while i < len(argv):
@@ -49,6 +51,8 @@ def cmd_new(argv: list[str], config: Config):
             slug_arg = argv[i]
         elif a.startswith("--slug="):
             slug_arg = a.split("=", 1)[1]
+        elif a == "--write":
+            write_prompt = True
         elif a in ("-h", "--help"):
             from ..main import usage
             usage()
@@ -84,5 +88,13 @@ def cmd_new(argv: list[str], config: Config):
 
     run_id = f"{mmdd}-{b2}-{seq_code}-{clean_slug}"
     prompt_path = os.path.join(TASKS_DIR, f"{run_id}.prompt.md")
+
+    if write_prompt:
+        if sys.stdin.isatty():
+            print("handoff new: --write requires prompt text on stdin", file=sys.stderr)
+            sys.exit(2)
+        os.makedirs(os.path.dirname(prompt_path), exist_ok=True)
+        with open(prompt_path, "w") as f:
+            f.write(sys.stdin.read())
 
     print(prompt_path)
