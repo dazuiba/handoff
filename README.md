@@ -46,9 +46,8 @@ So: **only pay for the SOTA model** (Opus / GPT-5.5) — use it to plan and revi
 ```bash
 uv tool install handoff-cli
 handoff init        # creates the config, links skill / agent files
+uv tool upgrade handoff-cli   # update to the latest version
 ```
-
-Upgrade with `uv tool upgrade handoff-cli`.
 
 ### 2. Set your token
 

@@ -41,6 +41,11 @@ def main():
     from .core import _migrate_legacy_state
     _migrate_legacy_state()
 
+    # Non-blocking version check against PyPI (daemon thread, max 1/24h).
+    from .version_check import maybe_check
+
+    maybe_check()
+
     if len(sys.argv) < 2:
         config_path = os.path.join(os.path.expanduser("~"), ".handoff", "config.yaml")
         if not os.path.isfile(config_path):

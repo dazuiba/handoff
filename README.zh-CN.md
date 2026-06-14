@@ -47,9 +47,8 @@
 ```bash
 uv tool install handoff-cli
 handoff init        # 初始化配置，链接 skill / agent 文件
+uv tool upgrade handoff-cli   # 更新到最新版
 ```
-
-更新：`uv tool upgrade handoff-cli`。
 
 ### 2. 配 token
 
