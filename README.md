@@ -90,7 +90,7 @@ The task runs in the background; your session is never blocked. When it finishes
 | `/handoff-ds` | Claude Code | DeepSeek V4 | Execution work: writing code, running tests, refactors, bulk edits |
 | `handoff-ds` (subagent) | Codex | DeepSeek V4 | Same as above — use this when you're inside Codex |
 | `/handoff-codex` | Claude Code | Codex (GPT-5.5) | Heavy reasoning, second opinions, hard bugs |
-| `/handoff-opus` | Claude Code | Claude Opus | Decisions that deserve the top model |
+| `/handoff-opus` | codex/deepseek | Claude Opus | Decisions that deserve the top model |
 
 > Codex has no slash commands — from Codex you invoke the subagent of the same name instead: say "have `handoff-ds` execute the task above."
 
