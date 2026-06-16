@@ -94,7 +94,7 @@ def cmd_new(argv: list[str], config: Config):
             print("handoff new: --write requires prompt text on stdin", file=sys.stderr)
             sys.exit(2)
         os.makedirs(os.path.dirname(prompt_path), exist_ok=True)
-        with open(prompt_path, "w") as f:
+        with open(prompt_path, "w", encoding="utf-8") as f:
             f.write(sys.stdin.read())
 
     print(prompt_path)

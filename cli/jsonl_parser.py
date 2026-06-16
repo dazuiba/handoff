@@ -213,7 +213,7 @@ def format_event_for_stream(event: ParsedEvent) -> str | None:
 def extract_result(jsonl_path: str) -> str | None:
     """Return the last successful result text from a JSONL file."""
     try:
-        with open(jsonl_path, "r") as handle:
+        with open(jsonl_path, "r", encoding="utf-8") as handle:
             last_result = None
             events, _ = read_events(handle)
             for event in events:

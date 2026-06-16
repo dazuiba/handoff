@@ -166,12 +166,12 @@ def cmd_run(argv: list[str], config: Config):
                 )
                 sys.exit(2)
 
-            with open(input_src) as f:
+            with open(input_src, encoding="utf-8") as f:
                 prompt_text = f.read()
             adopted_run_id = stem
             slug = _slug  # unused when adopting, but kept for clarity
         else:
-            with open(input_src) as f:
+            with open(input_src, encoding="utf-8") as f:
                 prompt_text = f.read()
             slug = slug_arg or "from-file"
     else:
@@ -245,7 +245,7 @@ def _execute(
 
     # Write prompt file only when not adopting (adopted file is already in place).
     if not adopted_run_id:
-        with open(prompt_path, "w") as pf:
+        with open(prompt_path, "w", encoding="utf-8") as pf:
             pf.write(prompt_text)
 
     # Resolve model

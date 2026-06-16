@@ -21,7 +21,7 @@ _CHECK_INTERVAL = 86400  # 24 hours
 
 def _load_state():
     try:
-        with open(_STATE_FILE) as f:
+        with open(_STATE_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {"last_check": 0}
@@ -30,7 +30,7 @@ def _load_state():
 def _save_state(ts):
     try:
         os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
-        with open(_STATE_FILE, "w") as f:
+        with open(_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump({"last_check": ts}, f)
     except OSError:
         pass
