@@ -64,7 +64,9 @@ backends:
     pro_model: "deepseek-v4-pro[1m]"
     env:
       ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
-      ANTHROPIC_AUTH_TOKEN: "sk-..."  # ← change this. Local proxy setup: https://github.com/iTzFaisal/oc-cc-proxy
+      #for opencode-go you have to setup local proxy  
+      #see: https://github.com/iTzFaisal/oc-cc-proxy
+      ANTHROPIC_AUTH_TOKEN: "sk-..."  
       ANTHROPIC_MODEL: "{model}"
 
   opus:                              # local claude login — zero config
