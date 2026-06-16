@@ -139,7 +139,7 @@ def cmd_resume(argv: list[str], config: Config):
         if not os.path.isfile(input_src):
             print(f"handoff resume: input file not found: {input_src}", file=sys.stderr)
             sys.exit(2)
-        with open(input_src) as f:
+        with open(input_src, encoding="utf-8") as f:
             prompt_text = f.read()
 
     if not cwd:

@@ -194,12 +194,12 @@ def execute_run(
     def emit_result_marker():
         disp = f"RESULT={result_path}"
         print(disp, file=sys.stderr, flush=True)
-        with open(out_path, "a") as of:
+        with open(out_path, "a", encoding="utf-8") as of:
             of.write(disp + "\n")
 
     def finish_success(result_text: str):
         update_status("success")
-        with open(result_path, "w") as rf:
+        with open(result_path, "w", encoding="utf-8") as rf:
             rf.write(result_text)
         emit_result_marker()
         conn.close()
@@ -218,7 +218,7 @@ def execute_run(
     )
 
     try:
-        with open(jsonl_path, "w") as jf, open(out_path, "w") as of:
+        with open(jsonl_path, "w", encoding="utf-8") as jf, open(out_path, "w", encoding="utf-8") as of:
 
             def handle_events(events):
                 for kind, payload in events:
@@ -256,7 +256,7 @@ def execute_run(
             proc.kill()
             proc.wait()
         update_status("interrupted")
-        with open(result_path, "w") as rf:
+        with open(result_path, "w", encoding="utf-8") as rf:
             rf.write("INTERRUPTED\n")
         emit_result_marker()
         print("\nhandoff run: interrupted", file=sys.stderr)
@@ -279,7 +279,7 @@ def execute_run(
         diag = f"handoff run: backend reported an error: {parser.result_text}\n" + diag
     print(diag.rstrip(), file=sys.stderr)
     print(f"JSONL={jsonl_path}", file=sys.stderr)
-    with open(result_path, "w") as rf:
+    with open(result_path, "w", encoding="utf-8") as rf:
         rf.write(diag)
     emit_result_marker()
     conn.close()

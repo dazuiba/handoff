@@ -57,7 +57,7 @@ def read_tui_theme() -> str:
     path = _tui_state_path()
     try:
         if os.path.isfile(path):
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             theme = data.get("theme", "")
             if isinstance(theme, str) and theme.strip():
@@ -76,7 +76,7 @@ def write_tui_theme(theme: str) -> None:
     path = _tui_state_path()
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump({"theme": theme}, f)
     except OSError:
         pass
@@ -105,7 +105,7 @@ def _load_yaml(path: str) -> dict:
     if not os.path.isfile(path):
         return {}
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         if not isinstance(data, dict):
             print(f"handoff: config {path} must be a mapping", file=sys.stderr)
@@ -126,9 +126,9 @@ def write_default_user_config() -> bool:
 
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(_USER_CONFIG_TEMPLATE_PATH, "r") as src:
+        with open(_USER_CONFIG_TEMPLATE_PATH, "r", encoding="utf-8") as src:
             content = src.read()
-        with open(path, "w") as dst:
+        with open(path, "w", encoding="utf-8") as dst:
             dst.write(content)
         return True
     except OSError as e:
